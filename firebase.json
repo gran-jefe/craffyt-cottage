@@ -1,0 +1,12 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json",
+    "edition": "enterprise",
+    "database": "craftycottage-db",
+    "location": "europe-west1"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  }
+}

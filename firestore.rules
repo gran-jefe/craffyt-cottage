@@ -1,0 +1,289 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Database: Cloud Firestore Standard Edition (Crafty Cottage e-commerce)
+    //
+    // Collection: admins
+    // Document ID: {uid} (Firebase Auth UID)
+    //
+    // Collection: products
+    // Document ID: {productId}
+    //
+    // Collection: orders (Private PII — Admin Read/Manage, Guest Create)
+    // Document ID: {orderId}
+    //
+    // Collection: orderTracking (Public Non-PII Mirror for /track)
+    // Document ID: {orderCode}
+    //
+    // Collection: bespokeRequests (Private PII — Admin Read/Manage, Guest Create)
+    // Document ID: {requestId}
+    //
+    // Collection: settings
+    // Document ID: {settingId} ('store' is publicly readable via get only)
+    //
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        ('admin' in request.auth.token && request.auth.token.admin == true) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function validString(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function validOptionalString(data, field, maxLen) {
+      return !(field in data) || (data[field] is string && data[field].size() <= maxLen);
+    }
+
+    function isValidEmail(email) {
+      return email is string &&
+        email.size() <= 160 &&
+        email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isSafeUrlOrPath(val, minLen, maxLen) {
+      return validString(val, minLen, maxLen) &&
+        !val.lower().matches("^\\s*javascript:.*");
+    }
+
+    function isValidTimestampOrString(val) {
+      return val is timestamp || validString(val, 1, 64);
+    }
+
+    function isValidOrderStatus(status) {
+      return status in [
+        'pending_verification',
+        'payment_confirmed',
+        'processing',
+        'dispatched',
+        'delivered',
+        'cancelled'
+      ];
+    }
+
+    function isValidProduct(data) {
+      let allowedKeys = [
+        'name', 'collection', 'price', 'stock', 'tag',
+        'description', 'imageUrl', 'active', 'featured',
+        'createdAt', 'updatedAt'
+      ];
+      let requiredKeys = [
+        'name', 'collection', 'price', 'stock', 'imageUrl',
+        'active', 'featured', 'createdAt', 'updatedAt'
+      ];
+      return data.keys().hasOnly(allowedKeys) &&
+        data.keys().hasAll(requiredKeys) &&
+        validString(data.name, 1, 120) &&
+        validString(data.collection, 1, 60) &&
+        data.price is number && data.price > 0 &&
+        data.stock is int && data.stock >= 0 &&
+        validOptionalString(data, 'tag', 40) &&
+        validOptionalString(data, 'description', 800) &&
+        isSafeUrlOrPath(data.imageUrl, 1, 1000) &&
+        data.active is bool &&
+        data.featured is bool &&
+        isValidTimestampOrString(data.createdAt) &&
+        isValidTimestampOrString(data.updatedAt);
+    }
+
+    function isValidOnlineContactAndReceipt(data) {
+      let requiredKeys = ['customerPhone', 'address', 'receiptUrl'];
+      return data.keys().hasAll(requiredKeys) &&
+        validString(data.customerPhone, 5, 30) &&
+        validString(data.address, 1, 500) &&
+        isSafeUrlOrPath(data.receiptUrl, 5, 1500);
+    }
+
+    function isValidOfflineContactAndReceipt(data) {
+      return validOptionalString(data, 'customerPhone', 30) &&
+        validOptionalString(data, 'address', 500) &&
+        (!('receiptUrl' in data) || data.receiptUrl == '' || isSafeUrlOrPath(data.receiptUrl, 5, 1500));
+    }
+
+    function isValidOrderCore(data, isOffline) {
+      let requiredKeys = [
+        'orderCode', 'customerName', 'deliveryZone',
+        'deliveryFee', 'items', 'subtotal', 'total',
+        'status', 'createdAt', 'updatedAt'
+      ];
+      return data.keys().hasAll(requiredKeys) &&
+        validString(data.orderCode, 3, 40) &&
+        validString(data.customerName, 1, 120) &&
+        (!('customerEmail' in data) || data.customerEmail == '' || isValidEmail(data.customerEmail)) &&
+        validString(data.deliveryZone, 1, 100) &&
+        data.deliveryFee is number && data.deliveryFee >= 0 &&
+        validOptionalString(data, 'notes', 1000) &&
+        data.items is list && data.items.size() >= 1 && data.items.size() <= 50 &&
+        data.items[0] is map &&
+        data.subtotal is number && data.subtotal > 0 &&
+        data.total is number && data.total > 0 &&
+        math.abs(data.total - (data.subtotal + data.deliveryFee)) < 0.01 &&
+        (!('channel' in data) || data.channel in ['online', 'offline']) &&
+        (!('paymentMethod' in data) || data.paymentMethod in ['bank_transfer', 'cash', 'pos', 'other']) &&
+        validOptionalString(data, 'offlineSource', 80) &&
+        (!('stockDeducted' in data) || data.stockDeducted is bool) &&
+        ((isOffline && isValidOfflineContactAndReceipt(data)) ||
+         (!isOffline && isValidOnlineContactAndReceipt(data))) &&
+        isValidTimestampOrString(data.createdAt) &&
+        isValidTimestampOrString(data.updatedAt);
+    }
+
+    function isValidOrderCreate(data) {
+      let allowedKeys = [
+        'orderCode', 'customerName', 'customerPhone', 'customerEmail',
+        'deliveryZone', 'deliveryFee', 'address', 'notes',
+        'items', 'subtotal', 'total', 'receiptUrl',
+        'status', 'channel', 'paymentMethod', 'offlineSource', 'stockDeducted',
+        'createdAt', 'updatedAt'
+      ];
+      let isOffline = 'channel' in data && data.channel == 'offline';
+      let isGuestValid = !isOffline &&
+        data.status == 'pending_verification' &&
+        !('offlineSource' in data) &&
+        (!('stockDeducted' in data) || data.stockDeducted == false) &&
+        isValidOrderCore(data, false);
+      let isAdminValid = isAdmin() &&
+        isValidOrderStatus(data.status) &&
+        isValidOrderCore(data, isOffline);
+      return data.keys().hasOnly(allowedKeys) && (isGuestValid || isAdminValid);
+    }
+
+    function isValidOrderUpdate(data, existing) {
+      let allowedKeys = [
+        'orderCode', 'customerName', 'customerPhone', 'customerEmail',
+        'deliveryZone', 'deliveryFee', 'address', 'notes',
+        'items', 'subtotal', 'total', 'receiptUrl',
+        'status', 'channel', 'paymentMethod', 'offlineSource', 'stockDeducted',
+        'dispatchNote', 'createdAt', 'updatedAt'
+      ];
+      let isOffline = 'channel' in existing && existing.channel == 'offline';
+      return data.keys().hasOnly(allowedKeys) &&
+        isValidOrderCore(data, isOffline) &&
+        data.diff(existing).affectedKeys().hasOnly(['status', 'dispatchNote', 'updatedAt']) &&
+        isValidOrderStatus(data.status) &&
+        validOptionalString(data, 'dispatchNote', 500);
+    }
+
+    function isValidOrderTracking(data, docOrderCode) {
+      let allowedKeys = [
+        'orderCode', 'status', 'deliveryZone', 'itemCount',
+        'total', 'dispatchNote', 'updatedAt'
+      ];
+      let requiredKeys = [
+        'orderCode', 'status', 'deliveryZone', 'itemCount',
+        'total', 'updatedAt'
+      ];
+      return data.keys().hasOnly(allowedKeys) &&
+        data.keys().hasAll(requiredKeys) &&
+        validString(data.orderCode, 3, 40) &&
+        data.orderCode == docOrderCode &&
+        isValidOrderStatus(data.status) &&
+        validString(data.deliveryZone, 1, 100) &&
+        data.itemCount is int && data.itemCount >= 1 && data.itemCount <= 10000 &&
+        data.total is number && data.total > 0 &&
+        validOptionalString(data, 'dispatchNote', 500) &&
+        isValidTimestampOrString(data.updatedAt);
+    }
+
+    function isValidBespokeRequest(data) {
+      let allowedKeys = [
+        'customerName', 'customerPhone', 'shape', 'beadColour',
+        'estimatedPrice', 'notes', 'status', 'createdAt'
+      ];
+      let requiredKeys = [
+        'customerName', 'customerPhone', 'shape', 'beadColour',
+        'estimatedPrice', 'status', 'createdAt'
+      ];
+      return data.keys().hasOnly(allowedKeys) &&
+        data.keys().hasAll(requiredKeys) &&
+        validString(data.customerName, 1, 120) &&
+        validString(data.customerPhone, 5, 30) &&
+        validString(data.shape, 1, 80) &&
+        validString(data.beadColour, 1, 80) &&
+        data.estimatedPrice is number && data.estimatedPrice > 0 &&
+        validOptionalString(data, 'notes', 1000) &&
+        validString(data.status, 1, 40) &&
+        isValidTimestampOrString(data.createdAt);
+    }
+
+    function isValidSettings(data) {
+      return data is map &&
+        data.keys().size() >= 1 &&
+        data.keys().size() <= 50;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    match /admins/{uid} {
+      allow get: if isOwner(uid);
+      allow list, create, update, delete: if false;
+    }
+
+    match /products/{productId} {
+      allow get, list: if true;
+      allow create: if isAdmin() && isValidProduct(request.resource.data);
+      allow update: if isAdmin() &&
+        isValidProduct(request.resource.data) &&
+        request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isAdmin();
+    }
+
+    match /orders/{orderId} {
+      allow create: if isValidOrderCreate(request.resource.data);
+      allow get, list: if isAdmin();
+      allow update: if isAdmin() && isValidOrderUpdate(request.resource.data, resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /orderTracking/{orderCode} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if isValidOrderTracking(request.resource.data, orderCode) && (
+        isAdmin() || (
+          request.resource.data.status == 'pending_verification' &&
+          (!('dispatchNote' in request.resource.data) || request.resource.data.dispatchNote == '')
+        )
+      );
+      allow update: if isAdmin() &&
+        isValidOrderTracking(request.resource.data, orderCode) &&
+        request.resource.data.orderCode == resource.data.orderCode;
+      allow delete: if isAdmin();
+    }
+
+    match /bespokeRequests/{requestId} {
+      allow create: if isValidBespokeRequest(request.resource.data) &&
+        request.resource.data.status == 'new';
+      allow get, list: if isAdmin();
+      allow update: if isAdmin() &&
+        isValidBespokeRequest(request.resource.data) &&
+        request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow get: if settingId == 'store' || isAdmin();
+      allow list: if isAdmin();
+      allow create, update: if isAdmin() && isValidSettings(request.resource.data);
+      allow delete: if isAdmin();
+    }
+  }
+}
