@@ -60,7 +60,20 @@ service cloud.firestore {
 
     function isSafeUrlOrPath(val, minLen, maxLen) {
       return validString(val, minLen, maxLen) &&
-        !val.lower().matches("^\\s*javascript:.*");
+        !val.lower().matches("^\\s*(javascript|data|vbscript):.*");
+    }
+
+    function isSafeMediaDataUrl(val, allowPdf, maxLen) {
+      return val is string &&
+        val.size() <= maxLen && (
+          val.matches("^data:image/(jpeg|jpg|png|webp|gif);base64,[A-Za-z0-9+/=]+$") ||
+          (allowPdf && val.matches("^data:application/pdf;base64,[A-Za-z0-9+/=]+$"))
+        );
+    }
+
+    function isSafeMediaValue(val, minLen, allowPdf, maxDataLen) {
+      return isSafeUrlOrPath(val, minLen, 1500) ||
+        isSafeMediaDataUrl(val, allowPdf, maxDataLen);
     }
 
     function isValidTimestampOrString(val) {
@@ -96,7 +109,7 @@ service cloud.firestore {
         data.stock is int && data.stock >= 0 &&
         validOptionalString(data, 'tag', 40) &&
         validOptionalString(data, 'description', 800) &&
-        isSafeUrlOrPath(data.imageUrl, 1, 1000) &&
+        isSafeMediaValue(data.imageUrl, 1, false, 700000) &&
         data.active is bool &&
         data.featured is bool &&
         isValidTimestampOrString(data.createdAt) &&
@@ -108,13 +121,13 @@ service cloud.firestore {
       return data.keys().hasAll(requiredKeys) &&
         validString(data.customerPhone, 5, 30) &&
         validString(data.address, 1, 500) &&
-        isSafeUrlOrPath(data.receiptUrl, 5, 1500);
+        isSafeMediaValue(data.receiptUrl, 5, true, 700000);
     }
 
     function isValidOfflineContactAndReceipt(data) {
       return validOptionalString(data, 'customerPhone', 30) &&
         validOptionalString(data, 'address', 500) &&
-        (!('receiptUrl' in data) || data.receiptUrl == '' || isSafeUrlOrPath(data.receiptUrl, 5, 1500));
+        (!('receiptUrl' in data) || data.receiptUrl == '' || isSafeMediaValue(data.receiptUrl, 5, true, 700000));
     }
 
     function isValidOrderCore(data, isOffline) {
