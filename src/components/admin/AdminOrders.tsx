@@ -10,17 +10,27 @@ import {
   Receipt,
   Plus,
   AlertTriangle,
+  ExternalLink,
 } from 'lucide-react'
 import { StockShortageError, updateOrderStatus } from '@/lib/storeService'
 import { formatNaira } from '@/lib/defaults'
 import { useCart } from '@/context/CartContext'
 import { OfflineSaleModal } from '@/components/admin/OfflineSaleModal'
 import { useDialogFocus } from '@/lib/useDialogFocus'
-import type { Order, OrderChannel, OrderStatus, PaymentMethod, Product } from '@/types/store'
+import type {
+  DeliveryZone,
+  Order,
+  OrderChannel,
+  OrderStatus,
+  PaymentMethod,
+  Product,
+} from '@/types/store'
 
 interface Props {
   orders: Order[]
   products: Product[]
+  /** Current zones from store settings; empty when settings aren't saved (fee check skipped). */
+  deliveryZones: DeliveryZone[]
   onRefresh: () => Promise<void>
 }
 
@@ -51,11 +61,75 @@ function isPdfReceipt(url: string): boolean {
 }
 
 /**
+ * Browsers refuse to open data: URLs in a new tab or frame, so a PDF stored inline (Spark plan)
+ * is decoded into a same-origin blob: URL that can be previewed and opened.
+ */
+function dataUrlToBlobUrl(dataUrl: string): string | null {
+  const match = /^data:([^;,]+);base64,(.*)$/.exec(dataUrl)
+  if (!match) return null
+  try {
+    const binary = atob(match[2])
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+    return URL.createObjectURL(new Blob([bytes], { type: match[1] }))
+  } catch {
+    return null
+  }
+}
+
+function PdfReceipt({ url, orderCode }: { url: string; orderCode: string }) {
+  const [viewUrl, setViewUrl] = useState<string | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    if (!url.startsWith('data:')) {
+      setViewUrl(url)
+      setFailed(false)
+      return
+    }
+    const blobUrl = dataUrlToBlobUrl(url)
+    setViewUrl(blobUrl)
+    setFailed(!blobUrl)
+    return () => {
+      if (blobUrl) URL.revokeObjectURL(blobUrl)
+    }
+  }, [url])
+
+  if (failed) {
+    return (
+      <p role="alert" className="py-10 px-4 text-sm text-[#B42318] text-center">
+        This PDF receipt couldn&apos;t be read. Ask the customer to resend it on WhatsApp before confirming payment.
+      </p>
+    )
+  }
+  if (!viewUrl) return <Loader2 className="w-6 h-6 my-10 animate-spin text-[#263E0F]" />
+
+  return (
+    <div className="w-full space-y-2">
+      <iframe
+        src={viewUrl}
+        title={`PDF payment receipt for ${orderCode}`}
+        className="w-full h-[55vh] rounded-xl bg-white border border-[#E2DACA]"
+      />
+      <a
+        href={viewUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="min-h-[44px] inline-flex items-center gap-1.5 px-2 text-sm font-bold text-[#263E0F] underline"
+      >
+        <ExternalLink className="w-4 h-4" />
+        <span>Open PDF in a new tab</span>
+      </a>
+    </div>
+  )
+}
+
+/**
  * Order totals are sent by the customer's browser, and Firestore rules can't sum a list,
  * so re-check the arithmetic here and compare line prices with today's catalogue.
  * Returns plain-language problems for the admin to resolve before confirming payment.
  */
-function auditOrderTotals(order: Order, products: Product[]): string[] {
+function auditOrderTotals(order: Order, products: Product[], zones: DeliveryZone[]): string[] {
   if (order.channel === 'offline') return [] // admin-entered, may include discounts
   const issues: string[] = []
   const itemsSum = order.items.reduce((sum, i) => sum + i.price * i.quantity, 0)
@@ -67,10 +141,25 @@ function auditOrderTotals(order: Order, products: Product[]): string[] {
       `Subtotal plus delivery is ${formatNaira(order.subtotal + order.deliveryFee)}, but the order total says ${formatNaira(order.total)}.`
     )
   }
+  // The delivery fee comes from the customer's browser too: compare it with the zone they picked.
+  if (zones.length > 0) {
+    const zone = zones.find((z) => z.label === order.deliveryZone)
+    if (!zone) {
+      issues.push(
+        `Delivery zone "${order.deliveryZone}" isn't one of your current zones (it may have been renamed). Check the ${formatNaira(order.deliveryFee)} delivery fee.`
+      )
+    } else if (Math.abs(zone.fee - order.deliveryFee) >= 1) {
+      issues.push(
+        `Delivery was charged at ${formatNaira(order.deliveryFee)}; ${zone.label} costs ${formatNaira(zone.fee)}.`
+      )
+    }
+  }
   const live = new Map(products.map((p) => [p.id, p]))
   for (const item of order.items) {
     const p = live.get(item.productId)
-    if (p && item.price < p.price) {
+    if (!p) {
+      issues.push(`${item.name} (${formatNaira(item.price)}) isn't in your inventory. Check its price before confirming.`)
+    } else if (item.price < p.price) {
       issues.push(`${item.name} was ordered at ${formatNaira(item.price)}; it is listed at ${formatNaira(p.price)} today.`)
     }
   }
@@ -95,7 +184,7 @@ function TotalsWarning({ issues }: { issues: string[] }) {
   )
 }
 
-export function AdminOrders({ orders, products, onRefresh }: Props) {
+export function AdminOrders({ orders, products, deliveryZones, onRefresh }: Props) {
   const { showToast } = useCart()
   const [filterChannel, setFilterChannel] = useState<'all' | OrderChannel>('all')
   const [filterStatus, setFilterStatus] = useState<'all' | OrderStatus>('all')
@@ -244,7 +333,8 @@ export function AdminOrders({ orders, products, onRefresh }: Props) {
               ? `234${phoneDigits.slice(1)}`
               : phoneDigits
             const zoneOrSource = order.offlineSource || order.deliveryZone
-            const totalIssues = order.status === 'pending_verification' ? auditOrderTotals(order, products) : []
+            const totalIssues =
+              order.status === 'pending_verification' ? auditOrderTotals(order, products, deliveryZones) : []
 
             return (
               <div
@@ -478,14 +568,7 @@ export function AdminOrders({ orders, products, onRefresh }: Props) {
 
             <div className="bg-[#FAF8F4] rounded-2xl border border-[#E2DACA] p-2 max-h-[60vh] overflow-auto flex items-center justify-center">
               {isPdfReceipt(receiptModalOrder.receiptUrl) ? (
-                <a
-                  href={receiptModalOrder.receiptUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="py-10 text-sm font-bold text-[#263E0F] underline"
-                >
-                  Open PDF receipt in a new tab
-                </a>
+                <PdfReceipt url={receiptModalOrder.receiptUrl} orderCode={receiptModalOrder.orderCode} />
               ) : (
                 <img
                   src={receiptModalOrder.receiptUrl}
@@ -496,7 +579,7 @@ export function AdminOrders({ orders, products, onRefresh }: Props) {
             </div>
 
             {receiptModalOrder.status === 'pending_verification' && (
-              <TotalsWarning issues={auditOrderTotals(receiptModalOrder, products)} />
+              <TotalsWarning issues={auditOrderTotals(receiptModalOrder, products, deliveryZones)} />
             )}
 
             {receiptModalOrder.status === 'pending_verification' && (

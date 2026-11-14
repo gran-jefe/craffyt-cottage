@@ -471,7 +471,12 @@ export default function AdminPortalPage() {
         ) : activeTab === 'inventory' ? (
           <AdminInventory products={products} onRefresh={loadAll} />
         ) : activeTab === 'orders' ? (
-          <AdminOrders orders={orders} products={products} onRefresh={loadAll} />
+          <AdminOrders
+            orders={orders}
+            products={products}
+            deliveryZones={settings?.deliveryZones ?? []}
+            onRefresh={loadAll}
+          />
         ) : activeTab === 'bespoke' ? (
           <AdminBespoke requests={bespoke} onRefresh={loadAll} />
         ) : (

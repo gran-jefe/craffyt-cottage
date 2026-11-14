@@ -12,6 +12,7 @@ import {
   Minus,
 } from 'lucide-react'
 import {
+  ReceiptFileError,
   adjustProductStock,
   deleteProduct,
   saveProduct,
@@ -119,8 +120,12 @@ export function AdminInventory({ products, onRefresh }: Props) {
       const url = await uploadMediaFile(file, 'products')
       setForm((prev) => ({ ...prev, imageUrl: url }))
       showToast('Product photo uploaded.')
-    } catch {
-      setFormError('Could not upload photo. Check Firebase Storage permissions.')
+    } catch (err) {
+      setFormError(
+        err instanceof ReceiptFileError
+          ? 'We couldn’t read this photo (iPhone HEIC photos often can’t be opened). Please use a JPG or PNG.'
+          : 'Could not upload the photo. Check your connection and try again.'
+      )
     } finally {
       setUploadingImg(false)
     }

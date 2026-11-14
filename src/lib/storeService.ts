@@ -64,15 +64,52 @@ function generateOrderCode(): string {
   return `CC-${suffix}`
 }
 
+/** True when uploads go to Cloud Storage; otherwise files are stored inline as compressed data URLs. */
+export const usesCloudStorage = process.env.NEXT_PUBLIC_ENABLE_FIREBASE_STORAGE === 'true'
+
+/** Inline storage keeps PDFs small enough to fit in a Firestore document (rules cap at ~700 KB of base64). */
+export const RECEIPT_PDF_MAX_BYTES = usesCloudStorage ? 10 * 1024 * 1024 : 450 * 1024
+export const RECEIPT_MAX_BYTES = 10 * 1024 * 1024
+
+/** A problem with the file itself, with a message the customer can act on. */
+export class ReceiptFileError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ReceiptFileError'
+  }
+}
+
+/** Returns a customer-readable problem with a receipt file, or null when it can be uploaded. */
+export function checkReceiptFile(file: File): string | null {
+  const isPdf = file.type === 'application/pdf'
+  if (!isPdf && !file.type.startsWith('image/')) {
+    return 'Please upload a screenshot (JPG or PNG) or a PDF of your transfer receipt.'
+  }
+  if (isPdf && file.size > RECEIPT_PDF_MAX_BYTES) {
+    return `This PDF is ${formatFileSize(file.size)}, and PDFs must be under ${formatFileSize(RECEIPT_PDF_MAX_BYTES)}. Please upload a screenshot of the receipt instead.`
+  }
+  if (file.size > RECEIPT_MAX_BYTES) {
+    return `This file is ${formatFileSize(file.size)}. Receipts must be under 10 MB.`
+  }
+  return null
+}
+
+export function formatFileSize(bytes: number): string {
+  return bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.ceil(bytes / 1024)} KB`
+}
+
 async function fileToCompressedDataUrl(file: File): Promise<string> {
   if (file.type === 'application/pdf') {
-    if (file.size > 450 * 1024) {
-      throw new Error('PDF receipt exceeds 450 KB limit. Please upload a screenshot image instead.')
+    if (file.size > RECEIPT_PDF_MAX_BYTES) {
+      throw new ReceiptFileError(
+        `PDFs must be under ${formatFileSize(RECEIPT_PDF_MAX_BYTES)}. Please upload a screenshot of the receipt instead.`
+      )
     }
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = () => resolve(String(reader.result || ''))
-      reader.onerror = () => reject(new Error('Could not read file'))
+      reader.onerror = () =>
+        reject(new ReceiptFileError('We couldn’t read this PDF. Please choose it again, or upload a screenshot.'))
       reader.readAsDataURL(file)
     })
   }
@@ -91,10 +128,16 @@ async function fileToCompressedDataUrl(file: File): Promise<string> {
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
         resolve(canvas.toDataURL('image/jpeg', 0.72))
       }
-      img.onerror = () => reject(new Error('Invalid image file'))
+      img.onerror = () =>
+        reject(
+          new ReceiptFileError(
+            'We couldn’t read this image (iPhone HEIC photos often can’t be opened). Please upload a JPG or PNG screenshot instead.'
+          )
+        )
       img.src = String(reader.result || '')
     }
-    reader.onerror = () => reject(new Error('Could not read file'))
+    reader.onerror = () =>
+      reject(new ReceiptFileError('We couldn’t read this file. Please choose it again, or upload a screenshot.'))
     reader.readAsDataURL(file)
   })
 }
@@ -125,8 +168,7 @@ export async function uploadMediaFile(
   file: File,
   folder: 'products' | 'receipts'
 ): Promise<string> {
-  const storageEnabled = process.env.NEXT_PUBLIC_ENABLE_FIREBASE_STORAGE === 'true'
-  if (storageEnabled && isFirebaseConfigured && storage) {
+  if (usesCloudStorage && isFirebaseConfigured && storage) {
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
     const storageRef = ref(storage, `${folder}/${Date.now()}-${safeName}`)
     await uploadBytes(storageRef, file, { contentType: file.type })

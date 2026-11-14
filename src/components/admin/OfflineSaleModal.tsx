@@ -3,7 +3,12 @@
 import React, { useEffect, useState } from 'react'
 import { useDialogFocus } from '@/lib/useDialogFocus'
 import { Loader2, Plus, Trash2, Upload, X } from 'lucide-react'
-import { createOfflineOrder, uploadMediaFile } from '@/lib/storeService'
+import {
+  ReceiptFileError,
+  checkReceiptFile,
+  createOfflineOrder,
+  uploadMediaFile,
+} from '@/lib/storeService'
 import { formatNaira } from '@/lib/defaults'
 import { useCart } from '@/context/CartContext'
 import type { OrderItem, OrderStatus, PaymentMethod, Product } from '@/types/store'
@@ -143,8 +148,10 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
   async function handleReceiptUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 10 * 1024 * 1024) {
-      setError('Receipt file must be under 10 MB.')
+    e.target.value = ''
+    const problem = checkReceiptFile(file)
+    if (problem) {
+      setError(problem)
       return
     }
     setUploadingReceipt(true)
@@ -153,8 +160,12 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
       const url = await uploadMediaFile(file, 'receipts')
       setReceiptUrl(url)
       showToast('Receipt slip attached.')
-    } catch {
-      setError('Could not upload receipt slip. Check Storage permissions.')
+    } catch (err) {
+      setError(
+        err instanceof ReceiptFileError
+          ? err.message
+          : 'Could not upload the receipt slip. Check your connection and try again.'
+      )
     } finally {
       setUploadingReceipt(false)
     }

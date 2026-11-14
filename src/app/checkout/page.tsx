@@ -20,7 +20,16 @@ import { SiteHeader } from '@/components/SiteHeader'
 import { SiteFooter } from '@/components/SiteFooter'
 import { useCart } from '@/context/CartContext'
 import { DEFAULT_STORE_SETTINGS, formatNaira, hasPaymentDetails } from '@/lib/defaults'
-import { createOrder, fetchProducts, fetchStoreSettings, uploadMediaFile } from '@/lib/storeService'
+import {
+  RECEIPT_PDF_MAX_BYTES,
+  ReceiptFileError,
+  checkReceiptFile,
+  createOrder,
+  fetchProducts,
+  fetchStoreSettings,
+  formatFileSize,
+  uploadMediaFile,
+} from '@/lib/storeService'
 import type { Order, StoreSettings } from '@/types/store'
 
 export default function CheckoutPage() {
@@ -125,9 +134,14 @@ export default function CheckoutPage() {
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
+    // Reset so choosing the same file again after an error still fires onChange.
+    e.target.value = ''
     if (!file) return
-    if (file.size > 10 * 1024 * 1024) {
-      setErrors((prev) => ({ ...prev, receipt: 'Receipt file must be under 10 MB.' }))
+    const problem = checkReceiptFile(file)
+    if (problem) {
+      setReceiptFile(null)
+      setReceiptPreview('')
+      setErrors((prev) => ({ ...prev, receipt: problem }))
       return
     }
     setErrors((prev) => {
@@ -213,10 +227,16 @@ export default function CheckoutPage() {
       showToast(`Order ${created.orderCode} submitted!`)
     } catch (err) {
       console.error(err)
-      setErrors({
-        submit:
-          'We could not complete your checkout right now. Please check your connection and try again.',
-      })
+      if (err instanceof ReceiptFileError) {
+        // The file itself is the problem: say so next to the upload, not as a connection error.
+        setErrors({ receipt: err.message })
+        document.getElementById('receipt-upload')?.focus()
+      } else {
+        setErrors({
+          submit:
+            'We could not complete your checkout right now. Please check your connection and try again. Your details are saved on this page.',
+        })
+      }
     } finally {
       setSubmitting(false)
     }
@@ -593,7 +613,7 @@ export default function CheckoutPage() {
                           {receiptFile ? receiptFile.name : 'Tap to choose receipt image or PDF'}
                         </span>
                         <span id="receipt-hint" className="text-xs text-[#4A5240]">
-                          JPG, PNG, or PDF · Max 10 MB
+                          JPG or PNG up to 10 MB · PDF up to {formatFileSize(RECEIPT_PDF_MAX_BYTES)}
                         </span>
                         <input
                           id="receipt-upload"
