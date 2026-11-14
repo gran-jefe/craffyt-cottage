@@ -373,7 +373,7 @@ export async function createOfflineOrder(input: CreateOfflineOrderInput): Promis
     parsedSoldAt && !Number.isNaN(parsedSoldAt.getTime()) ? parsedSoldAt.toISOString() : now
   const orderCode = generateOrderCode()
   const itemCount = input.items.reduce((sum, i) => sum + i.quantity, 0)
-  const cleanSource = input.offlineSource.trim() || 'In-Studio / Walk-in'
+  const cleanSource = input.offlineSource.trim() || 'In person / Walk-in'
   const deliveryFee = Math.max(0, Number(input.deliveryFee) || 0)
   const subtotal = Number(input.subtotal)
   const total = Number(input.total)

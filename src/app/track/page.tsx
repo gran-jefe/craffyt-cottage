@@ -158,7 +158,7 @@ function TrackContent() {
             className="mt-2 min-h-[44px] px-5 rounded-xl border border-[#263E0F] text-[#263E0F] hover:bg-[#EAF2DE] text-sm font-bold inline-flex items-center gap-2 transition-colors"
           >
             <MessageCircle className="w-4 h-4" />
-            <span>Ask the studio on WhatsApp</span>
+            <span>Ask us on WhatsApp</span>
           </a>
         </div>
       )}
@@ -235,7 +235,7 @@ function TrackContent() {
 
           {result.dispatchNote && result.status !== 'cancelled' && (
             <div className="p-4 rounded-xl bg-[#FAF8F4] border border-[#E2DACA] text-xs text-[#17210E]">
-              <span className="font-bold block mb-0.5">Studio note and tracking info</span>
+              <span className="font-bold block mb-0.5">Delivery note and tracking info</span>
               <span>{result.dispatchNote}</span>
             </div>
           )}

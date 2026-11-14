@@ -29,7 +29,7 @@ interface LineItemDraft {
 }
 
 const OFFLINE_SOURCES = [
-  'In-Studio / Walk-in',
+  'In person / Walk-in',
   'WhatsApp / DM',
   'Pop-up / Market',
   'Phone / Referral',
@@ -278,7 +278,7 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
               Record an offline sale
             </h3>
             <p className="text-xs text-[#4A5240]">
-              Log a studio walk-in, pop-up market, or DM purchase and optionally deduct inventory.
+              Log an in-person, pop-up market, or DM purchase and optionally deduct inventory.
             </p>
           </div>
           <button
@@ -537,7 +537,7 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
                 type="text"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                placeholder="e.g. Picked up at UI studio"
+                placeholder="e.g. Picked up on UI campus"
                 className="w-full min-h-[44px] px-3 rounded-xl border border-[#E2DACA] bg-[#FAF8F4] text-sm"
               />
             </div>

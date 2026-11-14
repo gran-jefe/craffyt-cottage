@@ -9,7 +9,6 @@ import {
   MessageCircle,
   Check,
   Search,
-  MapPin,
   Phone,
   Camera,
   Loader2,
@@ -26,13 +25,12 @@ import {
   formatNaira,
   formatNigerianPhone,
   instagramUrl,
-  mapsSearchUrl,
 } from '@/lib/defaults'
 import { useCart } from '@/context/CartContext'
 import type { Product, StoreSettings } from '@/types/store'
 
 function validateName(v: string): string | undefined {
-  return v.trim().length < 2 ? 'Enter your name so the studio can follow up.' : undefined
+  return v.trim().length < 2 ? 'Enter your name so we can follow up.' : undefined
 }
 
 function validatePhone(v: string): string | undefined {
@@ -134,7 +132,7 @@ export function StorefrontClient() {
         notes,
       })
       setBespokeSubmitted(true)
-      showToast('Custom bag request sent to the studio.')
+      showToast('Custom bag request sent to Crafty Cottage.')
     } catch {
       setBespokeError('Could not save your request right now. Please try again or use WhatsApp.')
     } finally {
@@ -155,7 +153,7 @@ export function StorefrontClient() {
               Hand-beaded bags, <em className="font-medium text-[#355416]">made in Ibadan.</em>
             </h1>
             <p className="text-base sm:text-lg text-[#4A5240] leading-relaxed max-w-xl">
-              Sculptural heart bags, pearl carryalls, and fringe clutches crafted by hand at the Crafty Cottage studio. Add ready-to-ship pieces to your bag or submit custom event colours.
+              Sculptural heart bags, pearl carryalls, and fringe clutches beaded by hand at Crafty Cottage. Add ready-to-ship pieces to your bag or submit custom event colours.
             </p>
 
             <div className="flex flex-wrap items-center gap-3 pt-1">
@@ -180,7 +178,7 @@ export function StorefrontClient() {
                 <Sparkles className="w-5 h-5 text-[#355416] shrink-0 mt-0.5" />
                 <span>
                   <strong className="block text-[#17210E]">Handcrafted</strong>
-                  Each piece made by hand in the studio
+                  Each piece beaded by hand
                 </span>
               </li>
               <li className="flex items-start gap-2.5">
@@ -261,7 +259,7 @@ export function StorefrontClient() {
                 Shop ready-to-ship pieces
               </h2>
               <p className="text-sm text-[#4A5240]">
-                Stock counts come straight from the studio’s inventory. Add pieces to your bag and pay by bank transfer.
+                Stock counts come straight from our inventory. Add pieces to your bag and pay by bank transfer.
               </p>
             </div>
 
@@ -319,7 +317,7 @@ export function StorefrontClient() {
                 We couldn&apos;t load the collection
               </h3>
               <p className="text-sm text-[#4A5240] max-w-md mx-auto">
-                This is usually a connection problem. Try again, or message the studio on WhatsApp to order directly.
+                This is usually a connection problem. Try again, or message us on WhatsApp to order directly.
               </p>
               <div className="flex flex-wrap justify-center gap-2">
                 <button
@@ -485,7 +483,7 @@ export function StorefrontClient() {
               Design a bag in your colours
             </h2>
             <p className="text-sm sm:text-base text-[#CFC6B2]">
-              Planning a wedding, aso-ebi, or milestone celebration? Pick your silhouette and bead finish, and send your custom spec straight to the studio dashboard.
+              Planning a wedding, aso-ebi, or milestone celebration? Pick your silhouette and bead finish, and send your custom spec straight to Crafty Cottage.
             </p>
           </div>
 
@@ -662,7 +660,7 @@ export function StorefrontClient() {
                 <div role="status" className="bg-[#263E0F] border border-[#E6C975]/60 p-4 rounded-xl text-sm text-[#FAF8F4] space-y-3">
                   <div className="space-y-1">
                     <p className="font-bold text-[#E6C975]">Request received by Crafty Cottage</p>
-                    <p>The studio has your {selectedShape.name} in {selectedBead.name} spec and will contact you on {customerPhone}.</p>
+                    <p>Crafty Cottage has your {selectedShape.name} in {selectedBead.name} spec and will contact you on {customerPhone}.</p>
                   </div>
                   <button
                     type="button"
@@ -684,7 +682,7 @@ export function StorefrontClient() {
                 {bespokeSubmitting ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Sending to studio...</span>
+                    <span>Sending request...</span>
                   </>
                 ) : (
                   <>
@@ -724,7 +722,7 @@ export function StorefrontClient() {
                   {formatNaira(bespokeTotal)}
                 </span>
                 <p className="text-xs text-[#CFC6B2] mt-1">
-                  Final timeline and custom shade confirmation shared upon studio review.
+                  Final timeline and custom shade confirmation shared once we review your request.
                 </p>
               </div>
 
@@ -751,28 +749,10 @@ export function StorefrontClient() {
             <blockquote className="font-serif-display italic text-2xl sm:text-3xl leading-snug text-[#111B07]">
               “Crafty Cottage is a bead haven where creativity meets simplicity. We source beads that are skin-friendly and fabric-friendly, so every piece helps you stand out.”
             </blockquote>
-            <p className="text-sm font-bold text-[#4A5240]">
-              Crafty Cottage Studio · {settings.studioLocation}
-            </p>
+            <p className="text-sm font-bold text-[#4A5240]">Crafty Cottage</p>
           </div>
 
           <ul className="lg:col-span-5 divide-y divide-[#E2DACA]">
-            <li>
-              <a
-                href={mapsSearchUrl(settings.studioLocation)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="min-h-[56px] py-3 flex items-center gap-3.5 hover:underline"
-              >
-                <span className="w-10 h-10 rounded-xl bg-white border border-[#E2DACA] text-[#263E0F] grid place-items-center shrink-0">
-                  <MapPin className="w-4 h-4" />
-                </span>
-                <span>
-                  <span className="block text-xs text-[#4A5240]">Studio location</span>
-                  <strong className="text-sm text-[#17210E]">{settings.studioLocation}</strong>
-                </span>
-              </a>
-            </li>
             <li>
               <a
                 href={`tel:+${settings.whatsappNumber}`}

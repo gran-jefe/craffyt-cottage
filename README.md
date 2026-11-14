@@ -3,7 +3,7 @@
 Handcrafted beaded bags e-commerce storefront and admin portal built with **Next.js 16 (App Router)** and **Firebase** (Firestore, Auth, Storage).
 
 ## Routes
-- `/` — Public storefront, live Prima Collection inventory, category/search filters, and Custom Bespoke Colour Studio.
+- `/` — Public storefront, live Prima Collection inventory, category/search filters, and the custom bag request form.
 - `/checkout` — Cart summary, Ibadan/Lagos/Nationwide delivery calculator, direct bank transfer instructions, and receipt upload.
 - `/track` — Customer order status tracker via Order Reference code (`CC-XXXXXX`).
 - `/admin` — Protected Admin Portal:
@@ -30,5 +30,5 @@ A **production build without Firebase keys fails on purpose**, so a misconfigure
    npx firebase-tools login
    npx firebase-tools deploy --only firestore:rules,storage
    ```
-5. Create an admin user in Firebase Auth, then add a document in Firestore at `admins/{uid}` (or set the custom claim `admin: true`). This is the only way to grant studio access.
+5. Create an admin user in Firebase Auth, then add a document in Firestore at `admins/{uid}` (or set the custom claim `admin: true`). This is the only way to grant admin access.
 6. Sign into `/admin` and click **Load Prima Collection** to populate your initial inventory into Firestore.

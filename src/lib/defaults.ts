@@ -73,9 +73,8 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   accountNumber: '',
   whatsappNumber: '2347035596492',
   instagramHandle: '@craftycottage.ng',
-  studioLocation: 'University of Ibadan, Oyo State',
   deliveryZones: [
-    { id: 'ui-pickup', label: 'University of Ibadan / Studio Pickup', fee: 0, eta: 'Same day (by appointment)' },
+    { id: 'ui-pickup', label: 'University of Ibadan pickup', fee: 0, eta: 'Same day (by appointment)' },
     { id: 'ibadan', label: 'Ibadan Dispatch Rider', fee: 2000, eta: '1–2 business days' },
     { id: 'lagos', label: 'Lagos Doorstep Delivery', fee: 4500, eta: '2–3 business days' },
     { id: 'nationwide', label: 'Nationwide Waybill (Abuja / PH / Others)', fee: 6000, eta: '3–5 business days' },
@@ -121,9 +120,6 @@ export function instagramUrl(handle: string): string {
   return `https://www.instagram.com/${encodeURIComponent(handle.trim().replace(/^@/, ''))}/`
 }
 
-export function mapsSearchUrl(place: string): string {
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}`
-}
 
 export function formatNaira(amount: number): string {
   return `₦${Number(amount || 0).toLocaleString('en-NG')}`

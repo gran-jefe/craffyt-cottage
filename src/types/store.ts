@@ -104,6 +104,5 @@ export interface StoreSettings {
   accountNumber: string
   whatsappNumber: string
   instagramHandle: string
-  studioLocation: string
   deliveryZones: DeliveryZone[]
 }

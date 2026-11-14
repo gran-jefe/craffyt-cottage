@@ -294,7 +294,7 @@ export default function CheckoutPage() {
                   className="flex-1 min-h-[48px] px-5 rounded-xl border border-[#263E0F] text-[#263E0F] hover:bg-[#EAF2DE] text-sm font-bold flex items-center justify-center gap-2 transition-colors"
                 >
                   <MessageCircle className="w-4 h-4" />
-                  <span>Notify the studio on WhatsApp</span>
+                  <span>Let us know on WhatsApp</span>
                 </a>
               </div>
             </div>
@@ -536,12 +536,12 @@ export default function CheckoutPage() {
                         <p>
                           <strong className="block">
                             {paymentStatus === 'error'
-                              ? 'We couldn’t load the studio’s bank details'
+                              ? 'We couldn’t load our bank details'
                               : 'Online payment is paused right now'}
                           </strong>
                           {paymentStatus === 'error'
-                            ? 'Please don’t send a transfer yet. Check your connection and try again, or confirm the account with the studio on WhatsApp.'
-                            : 'The studio hasn’t published its bank details yet. Please don’t send a transfer; message the studio on WhatsApp to complete your order.'}
+                            ? 'Please don’t send a transfer yet. Check your connection and try again, or confirm the account with us on WhatsApp.'
+                            : 'Our bank details aren’t available yet. Please don’t send a transfer; message us on WhatsApp to complete your order.'}
                         </p>
                         <div className="flex flex-wrap gap-2">
                           {paymentStatus === 'error' && (
@@ -562,7 +562,7 @@ export default function CheckoutPage() {
                             className="min-h-[44px] px-4 rounded-xl border border-[#263E0F] text-[#263E0F] hover:bg-amber-100 text-xs font-bold inline-flex items-center gap-1.5 transition-colors"
                           >
                             <MessageCircle className="w-4 h-4" />
-                            <span>Message the studio</span>
+                            <span>Message us on WhatsApp</span>
                           </a>
                         </div>
                       </div>
@@ -731,8 +731,8 @@ export default function CheckoutPage() {
                   {!paymentReady && (
                     <p id="payment-paused-hint" className="text-xs text-[#4A5240] text-center">
                       {paymentStatus === 'loading'
-                        ? 'Loading the studio’s bank details…'
-                        : 'Ordering is paused until the studio’s bank details are available.'}
+                        ? 'Loading our bank details…'
+                        : 'Ordering is paused until our bank details are available.'}
                     </p>
                   )}
                 </aside>

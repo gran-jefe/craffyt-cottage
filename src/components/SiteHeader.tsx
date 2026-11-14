@@ -14,7 +14,7 @@ export function SiteHeader() {
     <header className="sticky top-0 z-30 bg-[#FAF8F4]/95 backdrop-blur-md border-b border-[#E2DACA]">
       {isDemoMode && (
         <p role="note" className="bg-amber-100 text-amber-950 text-xs font-semibold text-center px-4 py-1.5">
-          Demo mode: orders and requests stay in this browser and are not sent to the studio.
+          Demo mode: orders and requests stay in this browser and are not sent to Crafty Cottage.
         </p>
       )}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-[68px] flex items-center justify-between gap-2 sm:gap-4">
@@ -100,7 +100,7 @@ export function SiteHeader() {
             onClick={() => setMobileOpen(false)}
             className="min-h-[44px] px-3 rounded-lg text-sm font-semibold text-[#17210E] hover:bg-[#F4EFE6] flex items-center"
           >
-            Custom bag studio
+            Design a custom bag
           </Link>
           <Link
             href="/track"

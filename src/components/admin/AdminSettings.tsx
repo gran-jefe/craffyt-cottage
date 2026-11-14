@@ -191,12 +191,12 @@ export function AdminSettings({ initialSettings, locked = false, onRefresh }: Pr
         </div>
       </section>
 
-      {/* Studio Contact */}
+      {/* Contact */}
       <section className="bg-white rounded-2xl border border-[#E2DACA] p-5 sm:p-6 space-y-4">
         <h3 className="font-serif-display text-lg font-bold text-[#17210E]">
-          Studio contact details
+          Contact details
         </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label htmlFor="set-wa" className="block text-xs font-bold mb-1">
               WhatsApp number (234...) *
@@ -220,18 +220,6 @@ export function AdminSettings({ initialSettings, locked = false, onRefresh }: Pr
               type="text"
               value={form.instagramHandle}
               onChange={(e) => setForm({ ...form, instagramHandle: e.target.value })}
-              className="w-full min-h-[44px] px-3 rounded-xl border border-[#E2DACA] bg-[#FAF8F4] text-sm"
-            />
-          </div>
-          <div>
-            <label htmlFor="set-loc" className="block text-xs font-bold mb-1">
-              Studio address
-            </label>
-            <input
-              id="set-loc"
-              type="text"
-              value={form.studioLocation}
-              onChange={(e) => setForm({ ...form, studioLocation: e.target.value })}
               className="w-full min-h-[44px] px-3 rounded-xl border border-[#E2DACA] bg-[#FAF8F4] text-sm"
             />
           </div>

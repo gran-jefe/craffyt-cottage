@@ -11,6 +11,10 @@ import {
   Plus,
   AlertTriangle,
   ExternalLink,
+  ArrowRight,
+  ChevronDown,
+  Truck,
+  XCircle,
 } from 'lucide-react'
 import { StockShortageError, updateOrderStatus } from '@/lib/storeService'
 import { formatNaira } from '@/lib/defaults'
@@ -184,6 +188,229 @@ function TotalsWarning({ issues }: { issues: string[] }) {
   )
 }
 
+/** The single forward step offered for each status. Pending is handled via the receipt review. */
+const NEXT_STEP: Partial<Record<OrderStatus, { next: OrderStatus; label: string }>> = {
+  payment_confirmed: { next: 'processing', label: 'Start preparing' },
+  processing: { next: 'dispatched', label: 'Mark as dispatched' },
+  dispatched: { next: 'delivered', label: 'Mark as delivered' },
+}
+
+interface OrderActionsProps {
+  order: Order
+  busy: boolean
+  anyBusy: boolean
+  waPhone: string
+  noteDraft: string
+  onNoteChange: (value: string) => void
+  onStatusChange: (next: OrderStatus) => Promise<boolean>
+  onOpenReceipt: () => void
+  onRequestCancel: () => void
+}
+
+/**
+ * One primary action per order (the next step in its lifecycle), quiet secondary links, and
+ * rarely-needed tools (notes, manual corrections, cancel) tucked behind "More".
+ */
+function OrderActions({
+  order,
+  busy,
+  anyBusy,
+  waPhone,
+  noteDraft,
+  onNoteChange,
+  onStatusChange,
+  onOpenReceipt,
+  onRequestCancel,
+}: OrderActionsProps) {
+  const [moreOpen, setMoreOpen] = useState(false)
+  const [dispatching, setDispatching] = useState(false)
+  const step = NEXT_STEP[order.status]
+  const isPending = order.status === 'pending_verification'
+  const noteChanged = noteDraft.trim() !== (order.dispatchNote ?? '').trim()
+  const morePanelId = `order-more-${order.id}`
+  const noteId = `order-note-${order.id}`
+  const dispatchNoteId = `order-dispatch-note-${order.id}`
+
+  const primaryClass =
+    'min-h-[44px] px-4 rounded-xl bg-[#263E0F] hover:bg-[#111B07] active:bg-[#0B1204] text-white text-sm font-bold inline-flex items-center gap-2 transition-colors disabled:opacity-60 disabled:cursor-not-allowed'
+  const secondaryClass =
+    'min-h-[44px] px-3.5 rounded-xl border border-[#E2DACA] bg-white hover:border-[#263E0F] hover:bg-[#FAF8F4] text-xs font-bold text-[#17210E] inline-flex items-center gap-1.5 transition-colors'
+
+  async function advance(next: OrderStatus) {
+    if (await onStatusChange(next)) {
+      setDispatching(false)
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      {dispatching ? (
+        <div className="p-3.5 rounded-xl bg-[#FAF8F4] border border-[#E2DACA] space-y-3">
+          <div>
+            <label htmlFor={dispatchNoteId} className="block text-xs font-bold text-[#17210E] mb-1">
+              Rider or tracking note <span className="font-normal text-[#4A5240]">(optional)</span>
+            </label>
+            <input
+              id={dispatchNoteId}
+              autoFocus
+              type="text"
+              maxLength={500}
+              value={noteDraft}
+              onChange={(e) => onNoteChange(e.target.value)}
+              placeholder="e.g. GIG waybill 1234567, or rider Tunde 0803 000 0000"
+              aria-describedby={`${dispatchNoteId}-hint`}
+              className="w-full min-h-[44px] px-3 rounded-xl border border-[#8C8270] bg-white text-sm"
+            />
+            <p id={`${dispatchNoteId}-hint`} className="mt-1 text-xs text-[#4A5240]">
+              The customer sees this on their tracking page.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={busy} onClick={() => advance('dispatched')} className={primaryClass}>
+              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Truck className="w-4 h-4 text-[#E6C975]" />}
+              <span>{busy ? 'Updating…' : 'Confirm dispatch'}</span>
+            </button>
+            <button type="button" disabled={busy} onClick={() => setDispatching(false)} className={secondaryClass}>
+              Back
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          {isPending && (
+            <button
+              type="button"
+              disabled={anyBusy}
+              onClick={order.receiptUrl ? onOpenReceipt : () => advance('payment_confirmed')}
+              className={primaryClass}
+            >
+              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4 text-[#E6C975]" />}
+              <span>{order.receiptUrl ? 'Review receipt and verify' : 'Verify payment'}</span>
+            </button>
+          )}
+
+          {step && (
+            <button
+              type="button"
+              disabled={anyBusy}
+              onClick={() => (step.next === 'dispatched' ? setDispatching(true) : advance(step.next))}
+              className={primaryClass}
+            >
+              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4 text-[#E6C975]" />}
+              <span>{busy ? 'Updating…' : step.label}</span>
+            </button>
+          )}
+
+          {!isPending && order.receiptUrl && (
+            <button type="button" onClick={onOpenReceipt} className={secondaryClass}>
+              <Eye className="w-3.5 h-3.5" />
+              <span>View receipt</span>
+            </button>
+          )}
+
+          {waPhone && (
+            <a
+              href={`https://wa.me/${waPhone}?text=${encodeURIComponent(
+                `Hello ${order.customerName}, thank you for your Crafty Cottage order (${order.orderCode}).`
+              )}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={secondaryClass}
+            >
+              <MessageCircle className="w-3.5 h-3.5 text-[#263E0F]" />
+              <span>WhatsApp</span>
+            </a>
+          )}
+
+          <button
+            type="button"
+            aria-expanded={moreOpen}
+            aria-controls={morePanelId}
+            onClick={() => setMoreOpen((o) => !o)}
+            className="ml-auto min-h-[44px] px-3 rounded-xl text-xs font-bold text-[#4A5240] hover:text-[#17210E] hover:bg-[#F4EFE6] inline-flex items-center gap-1 transition-colors"
+          >
+            <span>More</span>
+            <ChevronDown className={`w-4 h-4 transition-transform duration-150 ${moreOpen ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
+      )}
+
+      {moreOpen && !dispatching && (
+        <div
+          id={morePanelId}
+          className="grid grid-cols-1 md:grid-cols-12 gap-4 pt-3 border-t border-[#F4EFE6]"
+        >
+          <div className="md:col-span-7">
+            <label htmlFor={noteId} className="block text-xs font-bold text-[#17210E] mb-1">
+              Delivery note <span className="font-normal text-[#4A5240]">(shown on the tracking page)</span>
+            </label>
+            <div className="flex gap-2">
+              <input
+                id={noteId}
+                type="text"
+                maxLength={500}
+                value={noteDraft}
+                onChange={(e) => onNoteChange(e.target.value)}
+                placeholder="Rider, waybill or pickup details"
+                className="flex-1 min-w-0 min-h-[44px] px-3 rounded-xl border border-[#E2DACA] bg-[#FAF8F4] text-xs"
+              />
+              <button
+                type="button"
+                disabled={anyBusy || !noteChanged}
+                onClick={() => onStatusChange(order.status)}
+                className={`${secondaryClass} shrink-0 disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                Save note
+              </button>
+            </div>
+          </div>
+
+          <div className="md:col-span-5">
+            <label htmlFor={`order-status-${order.id}`} className="block text-xs font-bold text-[#17210E] mb-1">
+              Correct the status
+            </label>
+            <select
+              id={`order-status-${order.id}`}
+              disabled={anyBusy}
+              value={order.status}
+              aria-describedby={`order-status-${order.id}-hint`}
+              onChange={(e) => {
+                const next = e.target.value as OrderStatus
+                if (next === 'cancelled') onRequestCancel()
+                else onStatusChange(next)
+              }}
+              className="w-full min-h-[44px] px-3 rounded-xl border border-[#E2DACA] bg-[#FAF8F4] text-xs font-semibold"
+            >
+              {(Object.keys(STATUS_LABELS) as OrderStatus[]).map((st) => (
+                <option key={st} value={st}>
+                  {STATUS_LABELS[st].label}
+                </option>
+              ))}
+            </select>
+            <p id={`order-status-${order.id}-hint`} className="mt-1 text-xs text-[#4A5240]">
+              Only to fix a mistake. Leaving &quot;Pending&quot; for a paid status deducts stock.
+            </p>
+          </div>
+
+          {order.status !== 'cancelled' && (
+            <div className="md:col-span-12">
+              <button
+                type="button"
+                disabled={anyBusy}
+                onClick={onRequestCancel}
+                className="min-h-[44px] px-3 rounded-xl text-xs font-bold text-[#B42318] hover:bg-red-50 inline-flex items-center gap-1.5 transition-colors disabled:opacity-50"
+              >
+                <XCircle className="w-4 h-4" />
+                <span>Cancel order</span>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function AdminOrders({ orders, products, deliveryZones, onRefresh }: Props) {
   const { showToast } = useCart()
   const [filterChannel, setFilterChannel] = useState<'all' | OrderChannel>('all')
@@ -297,7 +524,7 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh }: Prop
           </p>
           <p className="text-sm text-[#4A5240]">
             {orders.length === 0
-              ? 'Customer checkout orders will appear here, or you can log an offline studio/DM purchase.'
+              ? 'Customer checkout orders will appear here, or you can log an in-person or DM purchase.'
               : 'Try resetting the channel or status filter, or record a new offline purchase.'}
           </p>
           <div className="flex flex-wrap justify-center gap-2 pt-1">
@@ -410,90 +637,17 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh }: Prop
                   )}
                 </ul>
 
-                {/* Actions Row */}
-                <div className="flex flex-wrap items-center gap-2.5">
-                  {order.receiptUrl && (
-                    <button
-                      type="button"
-                      onClick={() => setReceiptModalOrder(order)}
-                      className="min-h-[44px] px-3.5 rounded-xl border border-[#E2DACA] hover:border-[#263E0F] text-xs font-bold text-[#17210E] flex items-center gap-1.5"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>Inspect receipt</span>
-                    </button>
-                  )}
-
-                  {order.status === 'pending_verification' && (
-                    <button
-                      type="button"
-                      disabled={updatingId === order.id}
-                      onClick={() => handleStatusChange(order, 'payment_confirmed')}
-                      className="min-h-[44px] px-4 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      {updatingId === order.id ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-[#E6C975]" />
-                      )}
-                      <span>Verify payment</span>
-                    </button>
-                  )}
-
-                  <select
-                    aria-label={`Change status for ${order.orderCode}`}
-                    disabled={updatingId === order.id}
-                    value={order.status}
-                    onChange={(e) => {
-                      const next = e.target.value as OrderStatus
-                      if (next === 'cancelled') {
-                        setConfirmCancelId(order.id)
-                        return
-                      }
-                      handleStatusChange(order, next)
-                    }}
-                    className="min-h-[44px] px-3 rounded-xl border border-[#E2DACA] bg-[#FAF8F4] text-xs font-semibold"
-                  >
-                    {(Object.keys(STATUS_LABELS) as OrderStatus[]).map((st) => (
-                      <option key={st} value={st}>
-                        {STATUS_LABELS[st].label}
-                      </option>
-                    ))}
-                  </select>
-
-                  <input
-                    type="text"
-                    value={noteDrafts[order.id] ?? order.dispatchNote ?? ''}
-                    onChange={(e) =>
-                      setNoteDrafts((d) => ({ ...d, [order.id]: e.target.value }))
-                    }
-                    aria-label={`Dispatch or rider note for ${order.orderCode}`}
-                    placeholder="Dispatch / rider note..."
-                    className="flex-1 min-w-[180px] min-h-[44px] px-3 rounded-xl border border-[#E2DACA] bg-[#FAF8F4] text-xs"
-                  />
-
-                  <button
-                    type="button"
-                    disabled={updatingId === order.id}
-                    onClick={() => handleStatusChange(order, order.status)}
-                    className="min-h-[44px] px-3 rounded-xl border border-[#E2DACA] hover:bg-[#F4EFE6] text-xs font-bold"
-                  >
-                    Save note
-                  </button>
-
-                  {waPhone && (
-                    <a
-                      href={`https://wa.me/${waPhone}?text=${encodeURIComponent(
-                        `Hello ${order.customerName}, thank you for your Crafty Cottage order (${order.orderCode}).`
-                      )}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="min-h-[44px] px-3 rounded-xl border border-[#263E0F]/40 text-[#263E0F] hover:bg-[#EAF2DE] text-xs font-bold flex items-center gap-1"
-                    >
-                      <MessageCircle className="w-3.5 h-3.5" />
-                      <span>WhatsApp</span>
-                    </a>
-                  )}
-                </div>
+                <OrderActions
+                  order={order}
+                  busy={updatingId === order.id}
+                  anyBusy={Boolean(updatingId)}
+                  waPhone={waPhone}
+                  noteDraft={noteDrafts[order.id] ?? order.dispatchNote ?? ''}
+                  onNoteChange={(value) => setNoteDrafts((d) => ({ ...d, [order.id]: value }))}
+                  onStatusChange={(next) => handleStatusChange(order, next)}
+                  onOpenReceipt={() => setReceiptModalOrder(order)}
+                  onRequestCancel={() => setConfirmCancelId(order.id)}
+                />
 
                 {confirmCancelId === order.id && (
                   <div

@@ -162,7 +162,7 @@ export default function AdminPortalPage() {
             </span>
             <div>
               <h1 className="font-serif-display text-2xl font-bold text-[#17210E]">
-                Crafty Cottage studio
+                Crafty Cottage admin
               </h1>
               <p className="text-xs text-[#4A5240]">Sign in to manage bags, stock &amp; orders</p>
             </div>
@@ -172,7 +172,7 @@ export default function AdminPortalPage() {
             <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs text-[#B42318] space-y-2">
               <p className="font-bold">Access restricted</p>
               <p>
-                Signed in as <strong>{user.email}</strong>. This account doesn&apos;t have studio
+                Signed in as <strong>{user.email}</strong>. This account doesn&apos;t have admin
                 access. Ask the shop owner to add it, or sign in with a different account.
               </p>
               <button
@@ -318,7 +318,7 @@ export default function AdminPortalPage() {
             </span>
             <div>
               <h1 className="font-serif-display text-base sm:text-lg font-bold leading-none text-white">
-                Crafty Cottage studio
+                Crafty Cottage admin
               </h1>
               <span className="text-xs text-[#CFC6B2]">Inventory and orders</span>
             </div>
@@ -392,7 +392,7 @@ export default function AdminPortalPage() {
         <div className="flex flex-wrap items-center gap-2 border-b border-[#E2DACA] pb-3">
           <div
             role="tablist"
-            aria-label="Studio sections"
+            aria-label="Admin sections"
             className="flex flex-wrap gap-2"
             onKeyDown={(e) => {
               const ids = TAB_IDS
