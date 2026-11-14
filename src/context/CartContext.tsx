@@ -42,7 +42,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!toast) return
-    const timer = setTimeout(() => setToast(null), 3800)
+    // Errors usually carry instructions, so give them time to be read.
+    const timer = setTimeout(() => setToast(null), toast.tone === 'error' ? 8000 : 3800)
     return () => clearTimeout(timer)
   }, [toast])
 

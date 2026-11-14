@@ -66,9 +66,11 @@ export const DEFAULT_PRODUCTS: Product[] = [
 export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   brandName: 'Crafty Cottage',
   tagline: 'Bead to perfection',
-  bankName: 'GTBank (Update in Admin Settings)',
-  accountName: 'Crafty Cottage Enterprise',
-  accountNumber: '0123456789',
+  // Bank details are deliberately blank: checkout must never show an account the owner
+  // has not saved. Checkout stays paused until hasPaymentDetails() passes.
+  bankName: '',
+  accountName: '',
+  accountNumber: '',
   whatsappNumber: '2347035596492',
   instagramHandle: '@craftycottage.ng',
   studioLocation: 'University of Ibadan, Oyo State',
@@ -93,6 +95,19 @@ export const BESPOKE_BEADS = [
   { id: 'pearl', name: 'White Satin Pearl', extra: 0, swatch: 'radial-gradient(circle at 35% 35%,#FFFFFF,#DCD6CC)' },
   { id: 'emerald', name: 'Emerald & Clear', extra: 3000, swatch: 'linear-gradient(135deg,#2ECC71 0 50%,#E8F6EF 50% 100%)' },
 ]
+
+/** Nigerian NUBAN account numbers are exactly 10 digits. */
+export const NUBAN_PATTERN = /^\d{10}$/
+
+/** True only when the owner has saved a complete, well-formed bank account. */
+export function hasPaymentDetails(s: StoreSettings | null | undefined): s is StoreSettings {
+  return Boolean(
+    s &&
+      s.bankName.trim().length >= 2 &&
+      s.accountName.trim().length >= 2 &&
+      NUBAN_PATTERN.test(s.accountNumber.trim())
+  )
+}
 
 export function formatNaira(amount: number): string {
   return `₦${Number(amount || 0).toLocaleString('en-NG')}`

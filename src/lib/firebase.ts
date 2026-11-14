@@ -18,6 +18,21 @@ export const isFirebaseConfigured = Boolean(
   firebaseConfig.appId
 )
 
+/**
+ * Demo mode keeps data in the visitor's own browser, so an "order" never reaches the studio.
+ * It is only allowed in local development or when explicitly requested. A production build
+ * without Firebase keys fails loudly instead of telling paying customers their order was received.
+ */
+export const isDemoMode =
+  !isFirebaseConfigured &&
+  (process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_DEMO_MODE === 'true')
+
+if (!isFirebaseConfigured && !isDemoMode) {
+  throw new Error(
+    'Firebase is not configured. Set the NEXT_PUBLIC_FIREBASE_* variables, or set NEXT_PUBLIC_DEMO_MODE=true for a non-production demo.'
+  )
+}
+
 let app: FirebaseApp | null = null
 let db: Firestore | null = null
 let auth: Auth | null = null

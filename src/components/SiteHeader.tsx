@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import Link from 'next/link'
 import { ShoppingBag, Menu, X } from 'lucide-react'
 import { useCart } from '@/context/CartContext'
+import { isDemoMode } from '@/lib/firebase'
 
 export function SiteHeader() {
   const { totalCount, setDrawerOpen } = useCart()
@@ -11,6 +12,11 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-30 bg-[#FAF8F4]/95 backdrop-blur-md border-b border-[#E2DACA]">
+      {isDemoMode && (
+        <p role="note" className="bg-amber-100 text-amber-950 text-xs font-semibold text-center px-4 py-1.5">
+          Demo mode: orders and requests stay in this browser and are not sent to the studio.
+        </p>
+      )}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-[68px] flex items-center justify-between gap-2 sm:gap-4">
         <Link href="/" className="flex items-center gap-2.5 sm:gap-3 min-h-[44px] min-w-0 group">
           <span

@@ -11,7 +11,7 @@ import {
   Plus,
   AlertTriangle,
 } from 'lucide-react'
-import { updateOrderStatus } from '@/lib/storeService'
+import { StockShortageError, updateOrderStatus } from '@/lib/storeService'
 import { formatNaira } from '@/lib/defaults'
 import { useCart } from '@/context/CartContext'
 import { OfflineSaleModal } from '@/components/admin/OfflineSaleModal'
@@ -138,8 +138,13 @@ export function AdminOrders({ orders, products, onRefresh }: Props) {
           : `Order ${order.orderCode} updated to ${STATUS_LABELS[nextStatus].label}.`
       )
       return true
-    } catch {
-      showToast(`Could not update ${order.orderCode}. Check your connection and try again.`, 'error')
+    } catch (err) {
+      showToast(
+        err instanceof StockShortageError
+          ? `${order.orderCode}: ${err.message}`
+          : `Could not update ${order.orderCode}. Check your connection and try again.`,
+        'error'
+      )
       return false
     } finally {
       setUpdatingId(null)

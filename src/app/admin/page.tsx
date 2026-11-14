@@ -31,7 +31,7 @@ import {
   fetchProducts,
   fetchStoreSettings,
 } from '@/lib/storeService'
-import { DEFAULT_STORE_SETTINGS, formatNaira } from '@/lib/defaults'
+import { DEFAULT_STORE_SETTINGS, formatNaira, hasPaymentDetails } from '@/lib/defaults'
 import { AdminInventory } from '@/components/admin/AdminInventory'
 import { AdminOrders } from '@/components/admin/AdminOrders'
 import { AdminBespoke } from '@/components/admin/AdminBespoke'
@@ -60,7 +60,8 @@ export default function AdminPortalPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [orders, setOrders] = useState<Order[]>([])
   const [bespoke, setBespoke] = useState<BespokeRequest[]>([])
-  const [settings, setSettings] = useState<StoreSettings>(DEFAULT_STORE_SETTINGS)
+  // null = the owner has never saved settings (checkout is paused until they do).
+  const [settings, setSettings] = useState<StoreSettings | null>(null)
 
   const loadAll = useCallback(async () => {
     setLoadingData(true)
@@ -416,6 +417,30 @@ export default function AdminPortalPage() {
           })}
         </div>
 
+        {!loadError && !loadingData && !hasPaymentDetails(settings) && (
+          <div
+            role="alert"
+            className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl bg-amber-50 border border-amber-300"
+          >
+            <div className="flex items-start gap-2.5 text-sm text-amber-950">
+              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-amber-700" />
+              <p>
+                <strong className="block">Checkout is paused</strong>
+                Customers can&apos;t pay until you save your bank name, account name and 10-digit account number.
+              </p>
+            </div>
+            {activeTab !== 'settings' && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('settings')}
+                className="min-h-[44px] px-4 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-xs font-bold"
+              >
+                Add bank details
+              </button>
+            )}
+          </div>
+        )}
+
         {loadError && !loadingData && (
           <div
             role="alert"
@@ -450,7 +475,10 @@ export default function AdminPortalPage() {
         ) : activeTab === 'bespoke' ? (
           <AdminBespoke requests={bespoke} onRefresh={loadAll} />
         ) : (
-          <AdminSettings initialSettings={settings} onRefresh={loadAll} />
+          <AdminSettings initialSettings={settings ?? DEFAULT_STORE_SETTINGS}
+            locked={loadError}
+            onRefresh={loadAll}
+          />
         )}
       </main>
     </div>

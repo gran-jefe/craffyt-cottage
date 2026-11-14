@@ -17,7 +17,9 @@ Handcrafted beaded bags e-commerce storefront and admin portal built with **Next
 npm install
 npm run dev
 ```
-Without `.env.local` Firebase keys, the app runs in **Local Demo Mode** using browser storage so you can immediately test the storefront, checkout receipt upload, order tracking, and admin inventory portal.
+Without `.env.local` Firebase keys, `npm run dev` runs in **Local Demo Mode** using browser storage so you can test the storefront, order tracking and admin portal. A banner marks every page while demo mode is on. Checkout stays paused until you save bank details in Admin → Bank and delivery.
+
+A **production build without Firebase keys fails on purpose**, so a misconfigured deploy can never tell customers their order was received when it wasn't. To deploy a throwaway demo anyway, set `NEXT_PUBLIC_DEMO_MODE=true`.
 
 ## Connecting Live Firebase
 1. Create a Firebase project in the [Firebase Console](https://console.firebase.google.com).

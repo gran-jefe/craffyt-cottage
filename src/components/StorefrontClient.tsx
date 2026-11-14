@@ -22,7 +22,6 @@ import { fetchProducts, fetchStoreSettings, createBespokeRequest } from '@/lib/s
 import {
   BESPOKE_BEADS,
   BESPOKE_SHAPES,
-  DEFAULT_PRODUCTS,
   DEFAULT_STORE_SETTINGS,
   formatNaira,
 } from '@/lib/defaults'
@@ -39,10 +38,11 @@ function validatePhone(v: string): string | undefined {
 
 export function StorefrontClient() {
   const { addItem, setDrawerOpen, showToast } = useCart()
-  const [products, setProducts] = useState<Product[]>(DEFAULT_PRODUCTS)
+  // Only ever show products the studio has actually published: no seeded stand-ins with invented stock.
+  const [products, setProducts] = useState<Product[]>([])
   const [settings, setSettings] = useState<StoreSettings>(DEFAULT_STORE_SETTINGS)
   const [loadingProducts, setLoadingProducts] = useState(true)
-  const [stockUnavailable, setStockUnavailable] = useState(false)
+  const [catalogueError, setCatalogueError] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
 
   // Catalog filters
@@ -63,20 +63,25 @@ export function StorefrontClient() {
   useEffect(() => {
     let active = true
     setLoadingProducts(true)
-    setStockUnavailable(false)
-    Promise.all([fetchProducts(false), fetchStoreSettings()])
-      .then(([prods, storeCfg]) => {
-        if (!active) return
-        if (prods.length > 0) setProducts(prods)
-        setSettings(storeCfg)
+    setCatalogueError(false)
+    fetchProducts(false)
+      .then((prods) => {
+        if (active) setProducts(prods)
       })
       .catch(() => {
-        // Show the catalogue from defaults, but never sell against made-up stock counts.
-        if (active) setStockUnavailable(true)
+        if (!active) return
+        setProducts([])
+        setCatalogueError(true)
       })
       .finally(() => {
         if (active) setLoadingProducts(false)
       })
+    // Contact details only; the storefront can fall back to defaults if this fails.
+    fetchStoreSettings()
+      .then((cfg) => {
+        if (active && cfg) setSettings(cfg)
+      })
+      .catch(() => {})
     return () => {
       active = false
     }
@@ -298,27 +303,41 @@ export function StorefrontClient() {
             </div>
           )}
 
-          {stockUnavailable && !loadingProducts && (
+          {/* Product Grid */}
+          {catalogueError && !loadingProducts ? (
             <div
               role="alert"
-              className="mb-6 flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl bg-amber-50 border border-amber-300 text-sm text-amber-950"
+              className="bg-white rounded-2xl border border-amber-300 py-14 px-6 text-center space-y-3"
             >
-              <p>
-                <strong className="block">We couldn&apos;t load live stock right now</strong>
-                You can browse the collection, but adding to your bag is paused until stock is confirmed.
+              <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-800 mx-auto flex items-center justify-center">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <h3 className="font-serif-display text-xl font-bold text-[#17210E]">
+                We couldn&apos;t load the collection
+              </h3>
+              <p className="text-sm text-[#4A5240] max-w-md mx-auto">
+                This is usually a connection problem. Try again, or message the studio on WhatsApp to order directly.
               </p>
-              <button
-                type="button"
-                onClick={() => setReloadKey((k) => k + 1)}
-                className="min-h-[44px] px-4 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-xs font-bold"
-              >
-                Try again
-              </button>
+              <div className="flex flex-wrap justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReloadKey((k) => k + 1)}
+                  className="min-h-[44px] px-5 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-sm font-bold transition-colors"
+                >
+                  Try again
+                </button>
+                <a
+                  href={`https://wa.me/${settings.whatsappNumber}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="min-h-[44px] px-5 rounded-xl border border-[#263E0F] text-[#263E0F] hover:bg-[#EAF2DE] text-sm font-bold inline-flex items-center gap-2 transition-colors"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>Order on WhatsApp</span>
+                </a>
+              </div>
             </div>
-          )}
-
-          {/* Product Grid */}
-          {loadingProducts ? (
+          ) : loadingProducts ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {[1, 2, 3, 4].map((n) => (
                 <div
@@ -331,6 +350,24 @@ export function StorefrontClient() {
                   <div className="h-11 bg-[#E8DEC8] rounded-xl" />
                 </div>
               ))}
+            </div>
+          ) : products.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-[#E2DACA] py-14 px-6 text-center space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-[#EAF2DE] text-[#263E0F] mx-auto flex items-center justify-center">
+                <Palette className="w-6 h-6" />
+              </div>
+              <h3 className="font-serif-display text-xl font-bold text-[#17210E]">
+                New pieces are being beaded
+              </h3>
+              <p className="text-sm text-[#4A5240] max-w-md mx-auto">
+                Every ready-to-ship bag has found a home. You can still order one made in your colours.
+              </p>
+              <a
+                href="#custom"
+                className="inline-flex items-center justify-center min-h-[44px] px-5 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-sm font-bold transition-colors"
+              >
+                Design a custom bag
+              </a>
             </div>
           ) : filteredProducts.length === 0 ? (
             <div className="bg-white rounded-2xl border border-[#E2DACA] py-14 px-6 text-center space-y-3">
@@ -358,7 +395,7 @@ export function StorefrontClient() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {filteredProducts.map((product) => {
                 const soldOut = product.stock <= 0
-                const cannotBuy = soldOut || stockUnavailable
+                const cannotBuy = soldOut
                 const lowStock = product.stock > 0 && product.stock <= 2
 
                 return (
@@ -424,7 +461,7 @@ export function StorefrontClient() {
                       }`}
                     >
                       <ShoppingBag className="w-4 h-4 text-[#E6C975]" />
-                      <span>{soldOut ? 'Sold out' : stockUnavailable ? 'Checking stock' : 'Add to bag'}</span>
+                      <span>{soldOut ? 'Sold out' : 'Add to bag'}</span>
                     </button>
                   </article>
                 )

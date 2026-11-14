@@ -417,6 +417,34 @@ function shouldDeductStock(currentStatus: OrderStatus, nextStatus: OrderStatus):
   return currentStatus === 'pending_verification' && PAID_STATUSES.includes(nextStatus)
 }
 
+/**
+ * Thrown when confirming payment would take a product below zero stock (the same bag was
+ * sold twice before either payment was verified). Carries an admin-readable message.
+ */
+export class StockShortageError extends Error {
+  constructor(public readonly shortages: string[]) {
+    super(
+      `Not enough stock to confirm this order: ${shortages.join('; ')}. Restock the piece in Inventory, or cancel and refund the order.`
+    )
+    this.name = 'StockShortageError'
+  }
+}
+
+function findShortages(
+  items: OrderItem[],
+  stockFor: (productId: string) => number | null
+): string[] {
+  const shortages: string[] = []
+  for (const item of items) {
+    const stock = stockFor(item.productId)
+    if (stock === null) continue // product deleted since the order was placed
+    if (stock < item.quantity) {
+      shortages.push(`${item.name} has ${stock} left but the order needs ${item.quantity}`)
+    }
+  }
+  return shortages
+}
+
 export async function updateOrderStatus(
   order: Order,
   newStatus: OrderStatus,
@@ -434,13 +462,26 @@ export async function updateOrderStatus(
       const orderRef = doc(firestore, 'orders', order.id)
       const snap = await tx.get(orderRef)
       if (!snap.exists()) throw new Error('Order no longer exists')
-      const currentStatus = (snap.data() as Order).status
-      const deduct = shouldDeductStock(currentStatus, newStatus)
+      const stored = snap.data() as Order
+      const deduct = shouldDeductStock(stored.status, newStatus)
+      // Use the stored line items, not the UI copy, so stock moves by what was actually ordered.
+      const items = stored.items
 
       const productRefs = deduct
-        ? order.items.map((item) => doc(firestore, 'products', item.productId))
+        ? items.map((item) => doc(firestore, 'products', item.productId))
         : []
       const productSnaps = await Promise.all(productRefs.map((r) => tx.get(r)))
+
+      // Firestore rules reject negative stock, which would fail the whole transaction with an
+      // opaque permission error. Check first and tell the admin exactly what is short.
+      const stockById = new Map(
+        productSnaps.map((ps, i) => [
+          items[i].productId,
+          ps.exists() ? Math.floor(Number(ps.data().stock) || 0) : null,
+        ])
+      )
+      const shortages = findShortages(items, (id) => stockById.get(id) ?? null)
+      if (shortages.length > 0) throw new StockShortageError(shortages)
 
       tx.update(orderRef, { status: newStatus, dispatchNote: cleanNote, updatedAt: now })
       tx.update(doc(firestore, 'orderTracking', order.orderCode), {
@@ -451,7 +492,7 @@ export async function updateOrderStatus(
       productSnaps.forEach((ps, i) => {
         if (!ps.exists()) return // product deleted since the order was placed
         tx.update(productRefs[i], {
-          stock: increment(-order.items[i].quantity),
+          stock: increment(-items[i].quantity),
           updatedAt: now,
         })
       })
@@ -462,6 +503,14 @@ export async function updateOrderStatus(
   const orders = readDemo<Order[]>(DEMO_KEYS.orders, [])
   const stored = orders.find((o) => o.id === order.id)
   const shouldDecrementStock = shouldDeductStock(stored?.status ?? order.status, newStatus)
+  if (shouldDecrementStock) {
+    const products = readDemo<Product[]>(DEMO_KEYS.products, DEFAULT_PRODUCTS)
+    const shortages = findShortages(order.items, (id) => {
+      const p = products.find((x) => x.id === id)
+      return p ? p.stock : null
+    })
+    if (shortages.length > 0) throw new StockShortageError(shortages)
+  }
   writeDemo(
     DEMO_KEYS.orders,
     orders.map((o) =>
@@ -551,17 +600,19 @@ export async function updateBespokeStatus(id: string, status: BespokeStatus): Pr
 }
 
 /* ---------- Store Settings ---------- */
-export async function fetchStoreSettings(): Promise<StoreSettings> {
+/**
+ * Returns the saved store settings, or null when the owner has never saved them.
+ * Network and permission errors are thrown, never papered over with defaults:
+ * a fallback here would put a placeholder bank account in front of paying customers.
+ */
+export async function fetchStoreSettings(): Promise<StoreSettings | null> {
   if (isFirebaseConfigured && db) {
-    try {
-      const snap = await getDoc(doc(db, 'settings', 'store'))
-      if (snap.exists()) return snap.data() as StoreSettings
-    } catch {
-      return DEFAULT_STORE_SETTINGS
-    }
-    return DEFAULT_STORE_SETTINGS
+    const snap = await getDoc(doc(db, 'settings', 'store'))
+    if (!snap.exists()) return null
+    return { ...DEFAULT_STORE_SETTINGS, ...(snap.data() as Partial<StoreSettings>) }
   }
-  return readDemo<StoreSettings>(DEMO_KEYS.settings, DEFAULT_STORE_SETTINGS)
+  const saved = readDemo<StoreSettings | null>(DEMO_KEYS.settings, null)
+  return saved ? { ...DEFAULT_STORE_SETTINGS, ...saved } : null
 }
 
 export async function saveStoreSettings(settings: StoreSettings): Promise<void> {
