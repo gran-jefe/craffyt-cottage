@@ -39,6 +39,7 @@ import { AdminSettings } from '@/components/admin/AdminSettings'
 import type { BespokeRequest, Order, Product, StoreSettings } from '@/types/store'
 
 type Tab = 'inventory' | 'orders' | 'bespoke' | 'settings'
+const TAB_IDS: Tab[] = ['inventory', 'orders', 'bespoke', 'settings']
 
 export default function AdminPortalPage() {
   const [authLoading, setAuthLoading] = useState(isFirebaseConfigured)
@@ -56,6 +57,7 @@ export default function AdminPortalPage() {
   // Dashboard data
   const [activeTab, setActiveTab] = useState<Tab>('inventory')
   const [loadingData, setLoadingData] = useState(false)
+  const [hasLoaded, setHasLoaded] = useState(false)
   const [loadError, setLoadError] = useState(false)
   const [products, setProducts] = useState<Product[]>([])
   const [orders, setOrders] = useState<Order[]>([])
@@ -82,6 +84,7 @@ export default function AdminPortalPage() {
       setLoadError(true)
     } finally {
       setLoadingData(false)
+      setHasLoaded(true)
     }
   }, [])
 
@@ -385,39 +388,68 @@ export default function AdminPortalPage() {
           </div>
         </div>
 
-        {/* Navigation Tabs */}
-        <div className="flex flex-wrap gap-2 border-b border-[#E2DACA] pb-3" role="tablist">
-          {(
-            [
-              { id: 'inventory', label: `Inventory (${products.length})`, icon: Package },
-              { id: 'orders', label: `Orders and sales (${orders.length})`, icon: Receipt },
-              { id: 'bespoke', label: `Bespoke (${bespoke.length})`, icon: Sparkles },
-              { id: 'settings', label: 'Bank and delivery', icon: Settings },
-            ] as const
-          ).map((tab) => {
-            const Icon = tab.icon
-            const active = activeTab === tab.id
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setActiveTab(tab.id)}
-                className={`min-h-[44px] px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-colors border ${
-                  active
-                    ? 'bg-[#263E0F] text-white border-[#263E0F]'
-                    : 'bg-white text-[#4A5240] border-[#E2DACA] hover:text-[#17210E]'
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                <span>{tab.label}</span>
-              </button>
-            )
-          })}
+        {/* Navigation Tabs (WAI-ARIA tabs pattern: roving tabindex, arrow keys, linked panel) */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-[#E2DACA] pb-3">
+          <div
+            role="tablist"
+            aria-label="Studio sections"
+            className="flex flex-wrap gap-2"
+            onKeyDown={(e) => {
+              const ids = TAB_IDS
+              const i = ids.indexOf(activeTab)
+              const next =
+                e.key === 'ArrowRight' ? ids[(i + 1) % ids.length]
+                : e.key === 'ArrowLeft' ? ids[(i - 1 + ids.length) % ids.length]
+                : e.key === 'Home' ? ids[0]
+                : e.key === 'End' ? ids[ids.length - 1]
+                : null
+              if (!next) return
+              e.preventDefault()
+              setActiveTab(next)
+              document.getElementById(`tab-${next}`)?.focus()
+            }}
+          >
+            {(
+              [
+                { id: 'inventory', label: `Inventory (${products.length})`, icon: Package },
+                { id: 'orders', label: `Orders and sales (${orders.length})`, icon: Receipt },
+                { id: 'bespoke', label: `Bespoke (${bespoke.length})`, icon: Sparkles },
+                { id: 'settings', label: 'Bank and delivery', icon: Settings },
+              ] as const
+            ).map((tab) => {
+              const Icon = tab.icon
+              const active = activeTab === tab.id
+              return (
+                <button
+                  key={tab.id}
+                  id={`tab-${tab.id}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  aria-controls="admin-tabpanel"
+                  tabIndex={active ? 0 : -1}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`min-h-[44px] px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-colors border ${
+                    active
+                      ? 'bg-[#263E0F] text-white border-[#263E0F]'
+                      : 'bg-white text-[#4A5240] border-[#E2DACA] hover:text-[#17210E]'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span>{tab.label}</span>
+                </button>
+              )
+            })}
+          </div>
+          {loadingData && hasLoaded && (
+            <span role="status" className="ml-auto inline-flex items-center gap-1.5 text-xs font-semibold text-[#4A5240]">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Refreshing…
+            </span>
+          )}
         </div>
 
-        {!loadError && !loadingData && !hasPaymentDetails(settings) && (
+        {!loadError && hasLoaded && !hasPaymentDetails(settings) && (
           <div
             role="alert"
             className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl bg-amber-50 border border-amber-300"
@@ -463,8 +495,17 @@ export default function AdminPortalPage() {
           </div>
         )}
 
-        {/* Tab Body */}
-        {loadingData ? (
+        {/* Tab Body: the spinner only replaces it on first load. Later refreshes keep the
+            current view mounted so filters, unsaved notes and scroll position survive. */}
+        <div
+          id="admin-tabpanel"
+          role="tabpanel"
+          aria-labelledby={`tab-${activeTab}`}
+          aria-busy={loadingData}
+          tabIndex={0}
+          className="rounded-xl focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#263E0F]"
+        >
+        {!hasLoaded ? (
           <div className="py-16 flex justify-center">
             <Loader2 className="w-7 h-7 animate-spin text-[#263E0F]" />
           </div>
@@ -480,11 +521,16 @@ export default function AdminPortalPage() {
         ) : activeTab === 'bespoke' ? (
           <AdminBespoke requests={bespoke} onRefresh={loadAll} />
         ) : (
-          <AdminSettings initialSettings={settings ?? DEFAULT_STORE_SETTINGS}
+          <AdminSettings
+            // Remount when the saved settings change (e.g. a retry succeeds) so the form never
+            // holds stale values that could be saved over the real ones.
+            key={JSON.stringify(settings)}
+            initialSettings={settings ?? DEFAULT_STORE_SETTINGS}
             locked={loadError}
             onRefresh={loadAll}
           />
         )}
+        </div>
       </main>
     </div>
   )

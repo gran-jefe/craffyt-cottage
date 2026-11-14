@@ -24,11 +24,11 @@ A **production build without Firebase keys fails on purpose**, so a misconfigure
 ## Connecting Live Firebase
 1. Create a Firebase project in the [Firebase Console](https://console.firebase.google.com).
 2. Enable **Authentication** (Email/Password provider), **Cloud Firestore** (Standard edition), and **Cloud Storage**.
-3. Copy `.env.example` to `.env.local` and paste your Firebase Web App credentials plus `NEXT_PUBLIC_ADMIN_EMAILS=owner@craftycottage.ng`.
+3. Copy `.env.example` to `.env.local` and paste your Firebase Web App credentials.
 4. Deploy the security rules:
    ```bash
    npx firebase-tools login
    npx firebase-tools deploy --only firestore:rules,storage
    ```
-5. Create an admin user in Firebase Auth, then add a document in Firestore at `admins/{uid}` (or set `NEXT_PUBLIC_ADMIN_EMAILS` / custom claim `admin: true`).
+5. Create an admin user in Firebase Auth, then add a document in Firestore at `admins/{uid}` (or set the custom claim `admin: true`). This is the only way to grant studio access.
 6. Sign into `/admin` and click **Load Prima Collection** to populate your initial inventory into Firestore.

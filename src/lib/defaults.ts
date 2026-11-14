@@ -109,6 +109,22 @@ export function hasPaymentDetails(s: StoreSettings | null | undefined): s is Sto
   )
 }
 
+/** "2347035596492" → "+234 703 559 6492". Falls back to "+<digits>" for other shapes. */
+export function formatNigerianPhone(international: string): string {
+  const digits = international.replace(/\D/g, '')
+  const m = /^234(\d{3})(\d{3})(\d{4})$/.exec(digits)
+  return m ? `+234 ${m[1]} ${m[2]} ${m[3]}` : `+${digits}`
+}
+
+/** "@craftycottage.ng" → "https://www.instagram.com/craftycottage.ng/" */
+export function instagramUrl(handle: string): string {
+  return `https://www.instagram.com/${encodeURIComponent(handle.trim().replace(/^@/, ''))}/`
+}
+
+export function mapsSearchUrl(place: string): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}`
+}
+
 export function formatNaira(amount: number): string {
   return `₦${Number(amount || 0).toLocaleString('en-NG')}`
 }

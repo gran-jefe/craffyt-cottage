@@ -352,7 +352,7 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
 
                     <div className="sm:col-span-3">
                       <label htmlFor={`offline-price-${line.key}`} className="block text-xs font-bold mb-1">
-                        Unit Price (₦)
+                        Unit price (₦)
                       </label>
                       <input
                         id={`offline-price-${line.key}`}
@@ -406,7 +406,7 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
                     onChange={(e) => setDeductStock(e.target.checked)}
                     className="w-4 h-4 accent-[#263E0F]"
                   />
-                  <span>Deduct sold quantities from live inventory stock</span>
+                  <span>Deduct sold quantities from inventory stock</span>
                 </label>
                 {stockExceedsWarning && (
                   <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
@@ -516,7 +516,7 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
 
             <div>
               <label htmlFor="offline-delivery-fee" className="block text-xs font-bold mb-1">
-                Delivery Fee (₦)
+                Delivery fee (₦)
               </label>
               <input
                 id="offline-delivery-fee"

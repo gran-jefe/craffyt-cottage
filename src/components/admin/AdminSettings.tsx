@@ -50,6 +50,7 @@ export function AdminSettings({ initialSettings, locked = false, onRefresh }: Pr
   const [form, setForm] = useState<StoreSettings>(initialSettings)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Partial<Record<FieldKey, string>>>({})
+  const [confirmingBank, setConfirmingBank] = useState(false)
 
   function a11y(field: FieldKey) {
     const message = errors[field]
@@ -64,19 +65,37 @@ export function AdminSettings({ initialSettings, locked = false, onRefresh }: Pr
 
   function update<K extends keyof StoreSettings>(key: K, value: StoreSettings[K]) {
     setForm((f) => ({ ...f, [key]: value }))
+    // Any edit invalidates a pending read-back: the admin must confirm what will actually be saved.
+    setConfirmingBank(false)
     if (key in errors) setErrors((prev) => ({ ...prev, [key]: undefined }))
   }
 
+  const bankChanged =
+    form.bankName.trim() !== initialSettings.bankName.trim() ||
+    form.accountName.trim() !== initialSettings.accountName.trim() ||
+    form.accountNumber.trim() !== initialSettings.accountNumber.trim()
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    if (locked) return
+    if (locked || saving) return
     const nextErrors = validateSettings(form)
     setErrors(nextErrors)
     const first = FIELD_ORDER.find((k) => nextErrors[k])
     if (first) {
+      setConfirmingBank(false)
       document.getElementById(FIELD_IDS[first])?.focus()
       return
     }
+    // Changing where customers send money gets an explicit read-back before it goes live.
+    if (bankChanged && !confirmingBank) {
+      setConfirmingBank(true)
+      requestAnimationFrame(() => document.getElementById('bank-confirm-title')?.focus())
+      return
+    }
+    await persist()
+  }
+
+  async function persist() {
     setSaving(true)
     try {
       await saveStoreSettings({
@@ -86,8 +105,13 @@ export function AdminSettings({ initialSettings, locked = false, onRefresh }: Pr
         accountNumber: form.accountNumber.trim(),
         whatsappNumber: form.whatsappNumber.trim(),
       })
+      setConfirmingBank(false)
       await onRefresh()
-      showToast('Store & bank transfer details saved!')
+      showToast(
+        bankChanged
+          ? 'Saved. Checkout now shows the new bank account.'
+          : 'Store and delivery settings saved.'
+      )
     } catch {
       showToast('Could not save settings. Check your connection and try again.', 'error')
     } finally {
@@ -293,14 +317,83 @@ export function AdminSettings({ initialSettings, locked = false, onRefresh }: Pr
         </div>
       </section>
 
-      <button
-        type="submit"
-        disabled={saving || locked}
-        className="min-h-[48px] px-7 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-sm font-bold inline-flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-      >
-        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 text-[#E6C975]" />}
-        <span>{saving ? 'Saving settings...' : 'Save settings'}</span>
-      </button>
+      {confirmingBank ? (
+        <section
+          role="alertdialog"
+          aria-labelledby="bank-confirm-title"
+          aria-describedby="bank-confirm-desc"
+          className="p-5 rounded-2xl bg-amber-50 border border-amber-300 space-y-4"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape' && !saving) setConfirmingBank(false)
+          }}
+        >
+          <div className="space-y-1">
+            <h3
+              id="bank-confirm-title"
+              tabIndex={-1}
+              className="font-serif-display text-lg font-bold text-[#17210E] rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#263E0F]"
+            >
+              Confirm the new bank account
+            </h3>
+            <p id="bank-confirm-desc" className="text-sm text-amber-950">
+              Every customer who checks out after you save will transfer money to this account. Check each digit
+              against your bank app.
+            </p>
+          </div>
+          <dl className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 rounded-xl bg-white border border-amber-200 text-sm">
+            {initialSettings.accountNumber && (
+              <div className="sm:col-span-3 text-xs text-[#4A5240]">
+                Replacing {initialSettings.bankName} · {initialSettings.accountName} ·{' '}
+                <span className="tabular-nums">{initialSettings.accountNumber}</span>
+              </div>
+            )}
+            <div>
+              <dt className="text-xs text-[#4A5240]">Bank</dt>
+              <dd className="font-bold text-[#17210E]">{form.bankName.trim()}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-[#4A5240]">Account name</dt>
+              <dd className="font-bold text-[#17210E]">{form.accountName.trim()}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-[#4A5240]">Account number</dt>
+              <dd className="text-xl font-extrabold tracking-wider tabular-nums text-[#263E0F]">
+                {form.accountNumber.trim()}
+              </dd>
+            </div>
+          </dl>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="submit"
+              disabled={saving || locked}
+              className="min-h-[48px] px-6 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-sm font-bold inline-flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 text-[#E6C975]" />}
+              <span>{saving ? 'Saving…' : 'Yes, use this account'}</span>
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => {
+                setConfirmingBank(false)
+                document.getElementById('set-acc-num')?.focus()
+              }}
+              className="min-h-[48px] px-5 rounded-xl border border-[#8C8270] bg-white text-sm font-bold text-[#17210E] hover:bg-[#F4EFE6] disabled:opacity-60"
+            >
+              Go back and edit
+            </button>
+          </div>
+        </section>
+      ) : (
+        <button
+          type="submit"
+          disabled={saving || locked}
+          className="min-h-[48px] px-7 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-sm font-bold inline-flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 text-[#E6C975]" />}
+          <span>{saving ? 'Saving settings...' : bankChanged ? 'Review and save' : 'Save settings'}</span>
+        </button>
+      )}
     </form>
   )
 }

@@ -245,7 +245,7 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh }: Prop
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div>
           <h2 className="font-serif-display text-2xl font-bold text-[#17210E]">
-            Orders &amp; Offline Sales
+            Orders and offline sales
           </h2>
           <p className="text-xs text-[#4A5240]">
             Verify online transfer receipts, record offline walk-in or DM sales, and update delivery status.
@@ -428,7 +428,7 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh }: Prop
                       type="button"
                       disabled={updatingId === order.id}
                       onClick={() => handleStatusChange(order, 'payment_confirmed')}
-                      className="min-h-[44px] px-4 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-xs font-bold flex items-center gap-1.5"
+                      className="min-h-[44px] px-4 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       {updatingId === order.id ? (
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />

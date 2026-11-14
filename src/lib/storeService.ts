@@ -143,15 +143,13 @@ async function fileToCompressedDataUrl(file: File): Promise<string> {
 }
 
 /* ---------- Auth / Admin check ---------- */
+/**
+ * Mirrors the Firestore/Storage rules exactly: an `admin: true` custom claim or an admins/{uid}
+ * document. There is deliberately no email allowlist here: NEXT_PUBLIC_* values ship in the public
+ * bundle, and the rules wouldn't honour it anyway.
+ */
 export async function checkAdminAccess(user: User | null): Promise<boolean> {
   if (!user) return false
-  const allowlist = (process.env.NEXT_PUBLIC_ADMIN_EMAILS || '')
-    .split(',')
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean)
-  if (user.email && allowlist.includes(user.email.toLowerCase())) {
-    return true
-  }
   if (!isFirebaseConfigured || !db) return false
   try {
     const token = await user.getIdTokenResult()
@@ -242,18 +240,36 @@ export async function saveProduct(
   return newProduct
 }
 
-export async function adjustProductStock(productId: string, newStock: number): Promise<void> {
-  const safeStock = Math.max(0, Math.floor(newStock))
+/**
+ * Moves stock by `delta` relative to the value stored right now, never to an absolute number
+ * computed from a possibly stale screen. A sale confirmed at the same moment is therefore kept.
+ * Returns the new stock count.
+ */
+export async function adjustProductStockBy(productId: string, delta: number): Promise<number> {
+  const step = Math.trunc(delta)
   const now = new Date().toISOString()
   if (isFirebaseConfigured && db) {
-    await updateDoc(doc(db, 'products', productId), { stock: safeStock, updatedAt: now })
-    return
+    const firestore = db
+    return runTransaction(firestore, async (tx) => {
+      const ref = doc(firestore, 'products', productId)
+      const snap = await tx.get(ref)
+      if (!snap.exists()) throw new Error('Product no longer exists')
+      const next = Math.max(0, Math.floor(Number(snap.data().stock) || 0) + step)
+      tx.update(ref, { stock: next, updatedAt: now })
+      return next
+    })
   }
   const rows = readDemo<Product[]>(DEMO_KEYS.products, DEFAULT_PRODUCTS)
+  let next = 0
   writeDemo(
     DEMO_KEYS.products,
-    rows.map((p) => (p.id === productId ? { ...p, stock: safeStock, updatedAt: now } : p))
+    rows.map((p) => {
+      if (p.id !== productId) return p
+      next = Math.max(0, p.stock + step)
+      return { ...p, stock: next, updatedAt: now }
+    })
   )
+  return next
 }
 
 export async function deleteProduct(productId: string): Promise<void> {

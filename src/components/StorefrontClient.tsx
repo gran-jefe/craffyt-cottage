@@ -24,6 +24,9 @@ import {
   BESPOKE_SHAPES,
   DEFAULT_STORE_SETTINGS,
   formatNaira,
+  formatNigerianPhone,
+  instagramUrl,
+  mapsSearchUrl,
 } from '@/lib/defaults'
 import { useCart } from '@/context/CartContext'
 import type { Product, StoreSettings } from '@/types/store'
@@ -177,7 +180,7 @@ export function StorefrontClient() {
                 <Sparkles className="w-5 h-5 text-[#355416] shrink-0 mt-0.5" />
                 <span>
                   <strong className="block text-[#17210E]">Handcrafted</strong>
-                  Live inventory updated by studio
+                  Each piece made by hand in the studio
                 </span>
               </li>
               <li className="flex items-start gap-2.5">
@@ -252,13 +255,13 @@ export function StorefrontClient() {
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
             <div className="space-y-1.5">
               <p className="text-sm font-bold text-[#355416] uppercase tracking-wider">
-                Live studio inventory
+                Ready to ship
               </p>
               <h2 className="font-serif-display text-3xl sm:text-4xl font-bold text-[#111B07]">
                 Shop ready-to-ship pieces
               </h2>
               <p className="text-sm text-[#4A5240]">
-                Real-time stock synced with the Crafty Cottage studio. Add pieces to your bag and check out securely.
+                Stock counts come straight from the studio’s inventory. Add pieces to your bag and pay by bank transfer.
               </p>
             </div>
 
@@ -756,7 +759,7 @@ export function StorefrontClient() {
           <ul className="lg:col-span-5 divide-y divide-[#E2DACA]">
             <li>
               <a
-                href="https://www.google.com/maps/search/?api=1&query=University%20of%20Ibadan%2C%20Ibadan%2C%20Oyo%20State"
+                href={mapsSearchUrl(settings.studioLocation)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="min-h-[56px] py-3 flex items-center gap-3.5 hover:underline"
@@ -780,13 +783,15 @@ export function StorefrontClient() {
                 </span>
                 <span>
                   <span className="block text-xs text-[#4A5240]">Call or WhatsApp</span>
-                  <strong className="text-sm text-[#17210E]">+234 703 559 6492</strong>
+                  <strong className="text-sm text-[#17210E] tabular-nums">
+                    {formatNigerianPhone(settings.whatsappNumber)}
+                  </strong>
                 </span>
               </a>
             </li>
             <li>
               <a
-                href="https://www.instagram.com/craftycottage.ng/"
+                href={instagramUrl(settings.instagramHandle)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="min-h-[56px] py-3 flex items-center gap-3.5 hover:underline"
