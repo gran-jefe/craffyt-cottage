@@ -16,7 +16,12 @@ import {
   Truck,
   XCircle,
 } from 'lucide-react'
-import { StockShortageError, updateOrderStatus } from '@/lib/storeService'
+import {
+  StockShortageError,
+  isStockDeducted,
+  stockHeldByOrder,
+  updateOrderStatus,
+} from '@/lib/storeService'
 import { formatNaira } from '@/lib/defaults'
 import { useCart } from '@/context/CartContext'
 import { OfflineSaleModal } from '@/components/admin/OfflineSaleModal'
@@ -388,7 +393,7 @@ function OrderActions({
               ))}
             </select>
             <p id={`order-status-${order.id}-hint`} className="mt-1 text-xs text-[#4A5240]">
-              Only to fix a mistake. Leaving &quot;Pending&quot; for a paid status deducts stock.
+              Only to fix a mistake. Moving to a paid status takes the items off stock if they aren’t already.
             </p>
           </div>
 
@@ -420,6 +425,7 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh }: Prop
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({})
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null)
+  const [restockOnCancel, setRestockOnCancel] = useState(true)
   const receiptRef = useDialogFocus<HTMLDivElement>(Boolean(receiptModalOrder))
 
   useEffect(() => {
@@ -441,17 +447,27 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh }: Prop
     return matchesChannel && matchesStatus
   })
 
-  async function handleStatusChange(order: Order, nextStatus: OrderStatus): Promise<boolean> {
+  async function handleStatusChange(
+    order: Order,
+    nextStatus: OrderStatus,
+    options: { restock?: boolean } = {}
+  ): Promise<boolean> {
     if (updatingId) return false
     setUpdatingId(order.id)
     try {
       const note = noteDrafts[order.id] ?? order.dispatchNote ?? ''
-      await updateOrderStatus(order, nextStatus, note)
+      const { stockChange } = await updateOrderStatus(order, nextStatus, note, options)
       await onRefresh()
+      const units = Math.abs(stockChange)
+      const unitText = `${units} ${units === 1 ? 'item' : 'items'}`
+      const stockText =
+        stockChange > 0 ? ` ${unitText} put back in stock.` : stockChange < 0 ? ` ${unitText} taken off stock.` : ''
       showToast(
-        nextStatus === 'payment_confirmed'
-          ? `Payment verified for ${order.orderCode} and inventory stock updated!`
-          : `Order ${order.orderCode} updated to ${STATUS_LABELS[nextStatus].label}.`
+        nextStatus === 'payment_confirmed' && order.status === 'pending_verification'
+          ? `Payment verified for ${order.orderCode}.${stockText}`
+          : nextStatus === 'cancelled'
+            ? `${order.orderCode} cancelled.${stockText}`
+            : `${order.orderCode} is now ${STATUS_LABELS[nextStatus].label.toLowerCase()}.${stockText}`
       )
       return true
     } catch (err) {
@@ -560,6 +576,10 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh }: Prop
               ? `234${phoneDigits.slice(1)}`
               : phoneDigits
             const zoneOrSource = order.offlineSource || order.deliveryZone
+            // Units this order is holding off the shelf right now (what a cancel could put back).
+            const heldUnits = isStockDeducted(order)
+              ? Array.from(stockHeldByOrder(order.items).values()).reduce((n, h) => n + h.quantity, 0)
+              : 0
             const totalIssues =
               order.status === 'pending_verification' ? auditOrderTotals(order, products, deliveryZones) : []
 
@@ -646,20 +666,58 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh }: Prop
                   onNoteChange={(value) => setNoteDrafts((d) => ({ ...d, [order.id]: value }))}
                   onStatusChange={(next) => handleStatusChange(order, next)}
                   onOpenReceipt={() => setReceiptModalOrder(order)}
-                  onRequestCancel={() => setConfirmCancelId(order.id)}
+                  onRequestCancel={() => {
+                    // Default: put stock back, except after delivery (the bag is with the customer).
+                    setRestockOnCancel(order.status !== 'delivered')
+                    setConfirmCancelId(order.id)
+                  }}
                 />
 
                 {confirmCancelId === order.id && (
                   <div
                     role="alertdialog"
                     aria-labelledby={`cancel-title-${order.id}`}
-                    className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-red-50 border border-red-200"
+                    aria-describedby={`cancel-desc-${order.id}`}
+                    className="p-3.5 rounded-xl bg-red-50 border border-red-200 space-y-3"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape' && updatingId !== order.id) setConfirmCancelId(null)
+                    }}
                   >
-                    <p id={`cancel-title-${order.id}`} className="text-sm text-[#7A1B14]">
-                      <strong>Cancel {order.orderCode}?</strong> The customer will see
-                      &quot;Order cancelled&quot; on the tracking page. Stock is not returned automatically.
-                    </p>
-                    <div className="flex gap-2">
+                    <div className="text-sm text-[#7A1B14] space-y-0.5">
+                      <p id={`cancel-title-${order.id}`} className="font-bold">
+                        Cancel {order.orderCode}?
+                      </p>
+                      <p id={`cancel-desc-${order.id}`}>
+                        The customer will see &quot;Order cancelled&quot; on the tracking page.
+                        {heldUnits === 0 &&
+                          (order.status === 'pending_verification'
+                            ? ' No stock was taken for this order, so there is nothing to put back.'
+                            : ' This order isn’t holding any stock.')}
+                      </p>
+                    </div>
+
+                    {heldUnits > 0 && (
+                      <label className="flex items-start gap-2.5 min-h-[44px] p-2.5 -mx-1 rounded-lg bg-white/70 border border-red-100 cursor-pointer text-sm text-[#17210E]">
+                        <input
+                          type="checkbox"
+                          checked={restockOnCancel}
+                          onChange={(e) => setRestockOnCancel(e.target.checked)}
+                          className="mt-0.5 w-4 h-4 accent-[#263E0F] shrink-0"
+                        />
+                        <span>
+                          <strong className="block">
+                            Put {heldUnits} {heldUnits === 1 ? 'item' : 'items'} back in stock
+                          </strong>
+                          <span className="text-xs text-[#4A5240]">
+                            {order.status === 'delivered'
+                              ? 'Only tick this if the customer has returned the bag to you.'
+                              : 'Untick if the bag is damaged or no longer available to sell.'}
+                          </span>
+                        </span>
+                      </label>
+                    )}
+
+                    <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
                         onClick={() => setConfirmCancelId(null)}
@@ -671,7 +729,8 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh }: Prop
                         type="button"
                         disabled={updatingId === order.id}
                         onClick={async () => {
-                          if (await handleStatusChange(order, 'cancelled')) setConfirmCancelId(null)
+                          const restock = heldUnits > 0 && restockOnCancel
+                          if (await handleStatusChange(order, 'cancelled', { restock })) setConfirmCancelId(null)
                         }}
                         className="min-h-[44px] px-4 rounded-xl bg-[#B42318] hover:bg-[#912018] text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-60"
                       >

@@ -470,9 +470,44 @@ export async function fetchOrders(): Promise<Order[]> {
 
 const PAID_STATUSES: OrderStatus[] = ['payment_confirmed', 'processing', 'dispatched', 'delivered']
 
-/** Stock leaves the shelf exactly once: when an order first moves out of pending into any paid state. */
-function shouldDeductStock(currentStatus: OrderStatus, nextStatus: OrderStatus): boolean {
-  return currentStatus === 'pending_verification' && PAID_STATUSES.includes(nextStatus)
+/**
+ * Whether this order currently has its items taken off the shelf.
+ * Orders record this explicitly (`stockDeducted`). Older online orders saved before the flag
+ * existed are inferred from their status: paid statuses had stock deducted, others didn't.
+ */
+export function isStockDeducted(order: Pick<Order, 'status' | 'channel' | 'stockDeducted'>): boolean {
+  if (typeof order.stockDeducted === 'boolean') return order.stockDeducted
+  if (order.channel === 'offline') return false
+  return PAID_STATUSES.includes(order.status)
+}
+
+/** Catalogue quantities held by an order, merged per product (custom offline lines hold no stock). */
+export function stockHeldByOrder(items: OrderItem[]): Map<string, { name: string; quantity: number }> {
+  const held = new Map<string, { name: string; quantity: number }>()
+  for (const item of items) {
+    if (!item.productId || item.productId === 'custom') continue
+    const prev = held.get(item.productId)
+    held.set(item.productId, { name: item.name, quantity: (prev?.quantity ?? 0) + item.quantity })
+  }
+  return held
+}
+
+/**
+ * Stock moves are decided from the order's stored state, never the screen:
+ * - take off: moving into a paid status while nothing is held. Offline sales recorded
+ *   without deducting stay that way unless the app itself put their stock back earlier.
+ * - put back: cancelling with `restock` while stock is held.
+ */
+function planStockMove(
+  stored: Order,
+  newStatus: OrderStatus,
+  restock: boolean
+): 'deduct' | 'restore' | null {
+  const deducted = isStockDeducted(stored)
+  if (newStatus === 'cancelled') return restock && deducted ? 'restore' : null
+  if (!PAID_STATUSES.includes(newStatus) || deducted) return null
+  if (stored.channel === 'offline' && stored.stockRestored !== true) return null
+  return 'deduct'
 }
 
 /**
@@ -489,81 +524,97 @@ export class StockShortageError extends Error {
 }
 
 function findShortages(
-  items: OrderItem[],
+  held: Map<string, { name: string; quantity: number }>,
   stockFor: (productId: string) => number | null
 ): string[] {
   const shortages: string[] = []
-  for (const item of items) {
-    const stock = stockFor(item.productId)
+  for (const [productId, { name, quantity }] of held) {
+    const stock = stockFor(productId)
     if (stock === null) continue // product deleted since the order was placed
-    if (stock < item.quantity) {
-      shortages.push(`${item.name} has ${stock} left but the order needs ${item.quantity}`)
+    if (stock < quantity) {
+      shortages.push(`${name} has ${stock} left but the order needs ${quantity}`)
     }
   }
   return shortages
 }
 
+export interface UpdateOrderStatusOptions {
+  /** When cancelling, put the order's items back in stock (only if they are currently held). */
+  restock?: boolean
+}
+
+export interface UpdateOrderStatusResult {
+  /** Units taken off (negative) or put back (positive); 0 when stock didn't move. */
+  stockChange: number
+}
+
 export async function updateOrderStatus(
   order: Order,
   newStatus: OrderStatus,
-  dispatchNote = ''
-): Promise<void> {
+  dispatchNote = '',
+  options: UpdateOrderStatusOptions = {}
+): Promise<UpdateOrderStatusResult> {
   const now = new Date().toISOString()
   const cleanNote = dispatchNote.trim()
+  const restock = Boolean(options.restock)
 
   if (isFirebaseConfigured && db) {
     const firestore = db
-    // Decide on stock deduction from the order's CURRENT stored status, read inside
-    // a transaction, never from the (possibly stale) UI copy. This makes repeated
-    // clicks idempotent and covers jumps from pending straight to any paid status.
-    await runTransaction(firestore, async (tx) => {
+    // Everything is decided inside the transaction from the stored order, so repeated clicks
+    // and stale screens can never move stock twice.
+    return runTransaction(firestore, async (tx) => {
       const orderRef = doc(firestore, 'orders', order.id)
       const snap = await tx.get(orderRef)
       if (!snap.exists()) throw new Error('Order no longer exists')
       const stored = snap.data() as Order
-      const deduct = shouldDeductStock(stored.status, newStatus)
-      // Use the stored line items, not the UI copy, so stock moves by what was actually ordered.
-      const items = stored.items
+      const move = planStockMove(stored, newStatus, restock)
+      const held = move ? stockHeldByOrder(stored.items) : new Map<string, { name: string; quantity: number }>()
 
-      const productRefs = deduct
-        ? items.map((item) => doc(firestore, 'products', item.productId))
-        : []
+      const ids = Array.from(held.keys())
+      const productRefs = ids.map((id) => doc(firestore, 'products', id))
       const productSnaps = await Promise.all(productRefs.map((r) => tx.get(r)))
-
-      // Firestore rules reject negative stock, which would fail the whole transaction with an
-      // opaque permission error. Check first and tell the admin exactly what is short.
       const stockById = new Map(
-        productSnaps.map((ps, i) => [
-          items[i].productId,
-          ps.exists() ? Math.floor(Number(ps.data().stock) || 0) : null,
-        ])
+        productSnaps.map((ps, i) => [ids[i], ps.exists() ? Math.floor(Number(ps.data().stock) || 0) : null])
       )
-      const shortages = findShortages(items, (id) => stockById.get(id) ?? null)
-      if (shortages.length > 0) throw new StockShortageError(shortages)
 
-      tx.update(orderRef, { status: newStatus, dispatchNote: cleanNote, updatedAt: now })
-      tx.update(doc(firestore, 'orderTracking', order.orderCode), {
+      if (move === 'deduct') {
+        // Rules reject negative stock, which would surface as an opaque permission error.
+        const shortages = findShortages(held, (id) => stockById.get(id) ?? null)
+        if (shortages.length > 0) throw new StockShortageError(shortages)
+      }
+
+      const orderPatch: Record<string, unknown> = { status: newStatus, dispatchNote: cleanNote, updatedAt: now }
+      if (move === 'deduct') orderPatch.stockDeducted = true
+      if (move === 'restore') {
+        orderPatch.stockDeducted = false
+        orderPatch.stockRestored = true
+      }
+      tx.update(orderRef, orderPatch)
+      tx.update(doc(firestore, 'orderTracking', stored.orderCode), {
         status: newStatus,
         dispatchNote: cleanNote,
         updatedAt: now,
       })
+
+      let stockChange = 0
+      const sign = move === 'restore' ? 1 : -1
       productSnaps.forEach((ps, i) => {
         if (!ps.exists()) return // product deleted since the order was placed
-        tx.update(productRefs[i], {
-          stock: increment(-items[i].quantity),
-          updatedAt: now,
-        })
+        const qty = held.get(ids[i])!.quantity
+        stockChange += sign * qty
+        tx.update(productRefs[i], { stock: increment(sign * qty), updatedAt: now })
       })
+      return { stockChange }
     })
-    return
   }
 
   const orders = readDemo<Order[]>(DEMO_KEYS.orders, [])
-  const stored = orders.find((o) => o.id === order.id)
-  const shouldDecrementStock = shouldDeductStock(stored?.status ?? order.status, newStatus)
-  if (shouldDecrementStock) {
-    const products = readDemo<Product[]>(DEMO_KEYS.products, DEFAULT_PRODUCTS)
-    const shortages = findShortages(order.items, (id) => {
+  const stored = orders.find((o) => o.id === order.id) ?? order
+  const move = planStockMove(stored, newStatus, restock)
+  const held = move ? stockHeldByOrder(stored.items) : new Map<string, { name: string; quantity: number }>()
+  const products = readDemo<Product[]>(DEMO_KEYS.products, DEFAULT_PRODUCTS)
+  if (move === 'deduct') {
+    const shortages = findShortages(held, (id) => {
       const p = products.find((x) => x.id === id)
       return p ? p.stock : null
     })
@@ -571,18 +622,31 @@ export async function updateOrderStatus(
   }
   writeDemo(
     DEMO_KEYS.orders,
-    orders.map((o) =>
-      o.id === order.id ? { ...o, status: newStatus, dispatchNote: cleanNote, updatedAt: now } : o
-    )
-  )
-  if (shouldDecrementStock) {
-    const products = readDemo<Product[]>(DEMO_KEYS.products, DEFAULT_PRODUCTS)
-    const updatedProducts = products.map((p) => {
-      const match = order.items.find((i) => i.productId === p.id)
-      return match ? { ...p, stock: Math.max(0, p.stock - match.quantity), updatedAt: now } : p
+    orders.map((o) => {
+      if (o.id !== order.id) return o
+      const next: Order = { ...o, status: newStatus, dispatchNote: cleanNote, updatedAt: now }
+      if (move === 'deduct') next.stockDeducted = true
+      if (move === 'restore') {
+        next.stockDeducted = false
+        next.stockRestored = true
+      }
+      return next
     })
-    writeDemo(DEMO_KEYS.products, updatedProducts)
+  )
+  let stockChange = 0
+  if (move) {
+    const sign = move === 'restore' ? 1 : -1
+    writeDemo(
+      DEMO_KEYS.products,
+      products.map((p) => {
+        const h = held.get(p.id)
+        if (!h) return p
+        stockChange += sign * h.quantity
+        return { ...p, stock: Math.max(0, p.stock + sign * h.quantity), updatedAt: now }
+      })
+    )
   }
+  return { stockChange }
 }
 
 export async function lookupOrderTracking(orderCode: string): Promise<OrderTrackingInfo | null> {
