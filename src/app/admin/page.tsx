@@ -11,6 +11,7 @@ import {
   type User,
 } from 'firebase/auth'
 import {
+  LayoutDashboard,
   Package,
   Receipt,
   Sparkles,
@@ -31,15 +32,16 @@ import {
   fetchProducts,
   fetchStoreSettings,
 } from '@/lib/storeService'
-import { DEFAULT_STORE_SETTINGS, formatNaira, hasPaymentDetails } from '@/lib/defaults'
+import { DEFAULT_STORE_SETTINGS, hasPaymentDetails } from '@/lib/defaults'
 import { AdminInventory } from '@/components/admin/AdminInventory'
 import { AdminOrders } from '@/components/admin/AdminOrders'
 import { AdminBespoke } from '@/components/admin/AdminBespoke'
 import { AdminSettings } from '@/components/admin/AdminSettings'
-import type { BespokeRequest, Order, Product, StoreSettings } from '@/types/store'
+import { AdminOverview, type OverviewNavigate } from '@/components/admin/AdminOverview'
+import type { BespokeRequest, Order, OrderStatus, Product, StoreSettings } from '@/types/store'
 
-type Tab = 'inventory' | 'orders' | 'bespoke' | 'settings'
-const TAB_IDS: Tab[] = ['inventory', 'orders', 'bespoke', 'settings']
+type Tab = 'overview' | 'inventory' | 'orders' | 'bespoke' | 'settings'
+const TAB_IDS: Tab[] = ['overview', 'inventory', 'orders', 'bespoke', 'settings']
 
 export default function AdminPortalPage() {
   const [authLoading, setAuthLoading] = useState(isFirebaseConfigured)
@@ -55,7 +57,26 @@ export default function AdminPortalPage() {
   const [showPassword, setShowPassword] = useState(false)
 
   // Dashboard data
-  const [activeTab, setActiveTab] = useState<Tab>('inventory')
+  const [activeTab, setActiveTab] = useState<Tab>('overview')
+  // Set when the overview sends the admin to a pre-filtered order list (e.g. pending receipts).
+  const [ordersStatusPreset, setOrdersStatusPreset] = useState<OrderStatus | null>(null)
+
+  /** Tab chosen directly: always open it unfiltered. */
+  function selectTab(tab: Tab) {
+    setOrdersStatusPreset(null)
+    setActiveTab(tab)
+  }
+
+  /** From the overview: open a tab (optionally pre-filtered) and move focus into it. */
+  const navigateFromOverview: OverviewNavigate = (tab, options) => {
+    setOrdersStatusPreset(options?.orderStatus ?? null)
+    setActiveTab(tab)
+    requestAnimationFrame(() => {
+      const panel = document.getElementById('admin-tabpanel')
+      panel?.scrollIntoView({ block: 'start' })
+      panel?.focus({ preventScroll: true })
+    })
+  }
   const [loadingData, setLoadingData] = useState(false)
   const [hasLoaded, setHasLoaded] = useState(false)
   const [loadError, setLoadError] = useState(false)
@@ -299,14 +320,6 @@ export default function AdminPortalPage() {
     )
   }
 
-  // Dashboard Metrics
-  const confirmedRevenue = orders
-    .filter((o) => o.status !== 'pending_verification' && o.status !== 'cancelled')
-    .reduce((s, o) => s + o.total, 0)
-  const pendingOrdersCount = orders.filter((o) => o.status === 'pending_verification').length
-  const lowStockCount = products.filter((p) => p.stock <= 2).length
-  const newBespokeCount = bespoke.filter((b) => b.status === 'new').length
-
   return (
     <div className="min-h-screen bg-[#FAF8F4] flex flex-col">
       {/* Admin Top Bar */}
@@ -360,34 +373,6 @@ export default function AdminPortalPage() {
       )}
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8 space-y-8">
-        {/* KPI Strip */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white rounded-2xl border border-[#E2DACA] p-4">
-            <span className="text-xs text-[#4A5240] block">Verified revenue</span>
-            <strong className="font-serif-display text-2xl font-bold text-[#263E0F] tabular-nums mt-1 block">
-              {formatNaira(confirmedRevenue)}
-            </strong>
-          </div>
-          <div className="bg-white rounded-2xl border border-[#E2DACA] p-4">
-            <span className="text-xs text-[#4A5240] block">Receipts to verify</span>
-            <strong className="font-serif-display text-2xl font-bold text-[#17210E] tabular-nums mt-1 block">
-              {pendingOrdersCount}
-            </strong>
-          </div>
-          <div className="bg-white rounded-2xl border border-[#E2DACA] p-4">
-            <span className="text-xs text-[#4A5240] block">Low or out of stock</span>
-            <strong className="font-serif-display text-2xl font-bold text-[#B42318] tabular-nums mt-1 block">
-              {lowStockCount}
-            </strong>
-          </div>
-          <div className="bg-white rounded-2xl border border-[#E2DACA] p-4">
-            <span className="text-xs text-[#4A5240] block">New bespoke requests</span>
-            <strong className="font-serif-display text-2xl font-bold text-[#17210E] tabular-nums mt-1 block">
-              {newBespokeCount}
-            </strong>
-          </div>
-        </div>
-
         {/* Navigation Tabs (WAI-ARIA tabs pattern: roving tabindex, arrow keys, linked panel) */}
         <div className="flex flex-wrap items-center gap-2 border-b border-[#E2DACA] pb-3">
           <div
@@ -405,12 +390,13 @@ export default function AdminPortalPage() {
                 : null
               if (!next) return
               e.preventDefault()
-              setActiveTab(next)
+              selectTab(next)
               document.getElementById(`tab-${next}`)?.focus()
             }}
           >
             {(
               [
+                { id: 'overview', label: 'Overview', icon: LayoutDashboard },
                 { id: 'inventory', label: `Inventory (${products.length})`, icon: Package },
                 { id: 'orders', label: `Orders and sales (${orders.length})`, icon: Receipt },
                 { id: 'bespoke', label: `Bespoke (${bespoke.length})`, icon: Sparkles },
@@ -428,7 +414,7 @@ export default function AdminPortalPage() {
                   aria-selected={active}
                   aria-controls="admin-tabpanel"
                   tabIndex={active ? 0 : -1}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => selectTab(tab.id)}
                   className={`min-h-[44px] px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-colors border ${
                     active
                       ? 'bg-[#263E0F] text-white border-[#263E0F]'
@@ -509,6 +495,14 @@ export default function AdminPortalPage() {
           <div className="py-16 flex justify-center">
             <Loader2 className="w-7 h-7 animate-spin text-[#263E0F]" />
           </div>
+        ) : activeTab === 'overview' ? (
+          <AdminOverview
+            orders={orders}
+            products={products}
+            bespoke={bespoke}
+            refreshing={loadingData}
+            onNavigate={navigateFromOverview}
+          />
         ) : activeTab === 'inventory' ? (
           <AdminInventory products={products} onRefresh={loadAll} />
         ) : activeTab === 'orders' ? (
@@ -516,6 +510,7 @@ export default function AdminPortalPage() {
             orders={orders}
             products={products}
             deliveryZones={settings?.deliveryZones ?? []}
+            initialStatusFilter={ordersStatusPreset ?? undefined}
             onRefresh={loadAll}
           />
         ) : activeTab === 'bespoke' ? (

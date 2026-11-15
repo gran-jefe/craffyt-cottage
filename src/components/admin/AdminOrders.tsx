@@ -41,6 +41,8 @@ interface Props {
   /** Current zones from store settings; empty when settings aren't saved (fee check skipped). */
   deliveryZones: DeliveryZone[]
   onRefresh: () => Promise<void>
+  /** Open with this status filter applied (e.g. from the overview's "Review receipts"). */
+  initialStatusFilter?: OrderStatus
 }
 
 const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
@@ -416,10 +418,10 @@ function OrderActions({
   )
 }
 
-export function AdminOrders({ orders, products, deliveryZones, onRefresh }: Props) {
+export function AdminOrders({ orders, products, deliveryZones, onRefresh, initialStatusFilter }: Props) {
   const { showToast } = useCart()
   const [filterChannel, setFilterChannel] = useState<'all' | OrderChannel>('all')
-  const [filterStatus, setFilterStatus] = useState<'all' | OrderStatus>('all')
+  const [filterStatus, setFilterStatus] = useState<'all' | OrderStatus>(initialStatusFilter ?? 'all')
   const [offlineModalOpen, setOfflineModalOpen] = useState(false)
   const [receiptModalOrder, setReceiptModalOrder] = useState<Order | null>(null)
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({})
