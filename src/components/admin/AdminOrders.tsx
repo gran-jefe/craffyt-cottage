@@ -10,18 +10,39 @@ import {
   Receipt,
   Plus,
   AlertTriangle,
+  ExternalLink,
+  ArrowRight,
+  ChevronDown,
+  Truck,
+  XCircle,
 } from 'lucide-react'
-import { updateOrderStatus } from '@/lib/storeService'
+import {
+  StockShortageError,
+  isStockDeducted,
+  stockHeldByOrder,
+  updateOrderStatus,
+} from '@/lib/storeService'
 import { formatNaira } from '@/lib/defaults'
 import { useCart } from '@/context/CartContext'
 import { OfflineSaleModal } from '@/components/admin/OfflineSaleModal'
 import { useDialogFocus } from '@/lib/useDialogFocus'
-import type { Order, OrderChannel, OrderStatus, PaymentMethod, Product } from '@/types/store'
+import type {
+  DeliveryZone,
+  Order,
+  OrderChannel,
+  OrderStatus,
+  PaymentMethod,
+  Product,
+} from '@/types/store'
 
 interface Props {
   orders: Order[]
   products: Product[]
+  /** Current zones from store settings; empty when settings aren't saved (fee check skipped). */
+  deliveryZones: DeliveryZone[]
   onRefresh: () => Promise<void>
+  /** Open with this status filter applied (e.g. from the overview's "Review receipts"). */
+  initialStatusFilter?: OrderStatus
 }
 
 const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
@@ -51,11 +72,75 @@ function isPdfReceipt(url: string): boolean {
 }
 
 /**
+ * Browsers refuse to open data: URLs in a new tab or frame, so a PDF stored inline (Spark plan)
+ * is decoded into a same-origin blob: URL that can be previewed and opened.
+ */
+function dataUrlToBlobUrl(dataUrl: string): string | null {
+  const match = /^data:([^;,]+);base64,(.*)$/.exec(dataUrl)
+  if (!match) return null
+  try {
+    const binary = atob(match[2])
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+    return URL.createObjectURL(new Blob([bytes], { type: match[1] }))
+  } catch {
+    return null
+  }
+}
+
+function PdfReceipt({ url, orderCode }: { url: string; orderCode: string }) {
+  const [viewUrl, setViewUrl] = useState<string | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    if (!url.startsWith('data:')) {
+      setViewUrl(url)
+      setFailed(false)
+      return
+    }
+    const blobUrl = dataUrlToBlobUrl(url)
+    setViewUrl(blobUrl)
+    setFailed(!blobUrl)
+    return () => {
+      if (blobUrl) URL.revokeObjectURL(blobUrl)
+    }
+  }, [url])
+
+  if (failed) {
+    return (
+      <p role="alert" className="py-10 px-4 text-sm text-[#B42318] text-center">
+        This PDF receipt couldn&apos;t be read. Ask the customer to resend it on WhatsApp before confirming payment.
+      </p>
+    )
+  }
+  if (!viewUrl) return <Loader2 className="w-6 h-6 my-10 animate-spin text-[#263E0F]" />
+
+  return (
+    <div className="w-full space-y-2">
+      <iframe
+        src={viewUrl}
+        title={`PDF payment receipt for ${orderCode}`}
+        className="w-full h-[55vh] rounded-xl bg-white border border-[#E2DACA]"
+      />
+      <a
+        href={viewUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="min-h-[44px] inline-flex items-center gap-1.5 px-2 text-sm font-bold text-[#263E0F] underline"
+      >
+        <ExternalLink className="w-4 h-4" />
+        <span>Open PDF in a new tab</span>
+      </a>
+    </div>
+  )
+}
+
+/**
  * Order totals are sent by the customer's browser, and Firestore rules can't sum a list,
  * so re-check the arithmetic here and compare line prices with today's catalogue.
  * Returns plain-language problems for the admin to resolve before confirming payment.
  */
-function auditOrderTotals(order: Order, products: Product[]): string[] {
+function auditOrderTotals(order: Order, products: Product[], zones: DeliveryZone[]): string[] {
   if (order.channel === 'offline') return [] // admin-entered, may include discounts
   const issues: string[] = []
   const itemsSum = order.items.reduce((sum, i) => sum + i.price * i.quantity, 0)
@@ -67,10 +152,25 @@ function auditOrderTotals(order: Order, products: Product[]): string[] {
       `Subtotal plus delivery is ${formatNaira(order.subtotal + order.deliveryFee)}, but the order total says ${formatNaira(order.total)}.`
     )
   }
+  // The delivery fee comes from the customer's browser too: compare it with the zone they picked.
+  if (zones.length > 0) {
+    const zone = zones.find((z) => z.label === order.deliveryZone)
+    if (!zone) {
+      issues.push(
+        `Delivery zone "${order.deliveryZone}" isn't one of your current zones (it may have been renamed). Check the ${formatNaira(order.deliveryFee)} delivery fee.`
+      )
+    } else if (Math.abs(zone.fee - order.deliveryFee) >= 1) {
+      issues.push(
+        `Delivery was charged at ${formatNaira(order.deliveryFee)}; ${zone.label} costs ${formatNaira(zone.fee)}.`
+      )
+    }
+  }
   const live = new Map(products.map((p) => [p.id, p]))
   for (const item of order.items) {
     const p = live.get(item.productId)
-    if (p && item.price < p.price) {
+    if (!p) {
+      issues.push(`${item.name} (${formatNaira(item.price)}) isn't in your inventory. Check its price before confirming.`)
+    } else if (item.price < p.price) {
       issues.push(`${item.name} was ordered at ${formatNaira(item.price)}; it is listed at ${formatNaira(p.price)} today.`)
     }
   }
@@ -95,15 +195,239 @@ function TotalsWarning({ issues }: { issues: string[] }) {
   )
 }
 
-export function AdminOrders({ orders, products, onRefresh }: Props) {
+/** The single forward step offered for each status. Pending is handled via the receipt review. */
+const NEXT_STEP: Partial<Record<OrderStatus, { next: OrderStatus; label: string }>> = {
+  payment_confirmed: { next: 'processing', label: 'Start preparing' },
+  processing: { next: 'dispatched', label: 'Mark as dispatched' },
+  dispatched: { next: 'delivered', label: 'Mark as delivered' },
+}
+
+interface OrderActionsProps {
+  order: Order
+  busy: boolean
+  anyBusy: boolean
+  waPhone: string
+  noteDraft: string
+  onNoteChange: (value: string) => void
+  onStatusChange: (next: OrderStatus) => Promise<boolean>
+  onOpenReceipt: () => void
+  onRequestCancel: () => void
+}
+
+/**
+ * One primary action per order (the next step in its lifecycle), quiet secondary links, and
+ * rarely-needed tools (notes, manual corrections, cancel) tucked behind "More".
+ */
+function OrderActions({
+  order,
+  busy,
+  anyBusy,
+  waPhone,
+  noteDraft,
+  onNoteChange,
+  onStatusChange,
+  onOpenReceipt,
+  onRequestCancel,
+}: OrderActionsProps) {
+  const [moreOpen, setMoreOpen] = useState(false)
+  const [dispatching, setDispatching] = useState(false)
+  const step = NEXT_STEP[order.status]
+  const isPending = order.status === 'pending_verification'
+  const noteChanged = noteDraft.trim() !== (order.dispatchNote ?? '').trim()
+  const morePanelId = `order-more-${order.id}`
+  const noteId = `order-note-${order.id}`
+  const dispatchNoteId = `order-dispatch-note-${order.id}`
+
+  const primaryClass =
+    'min-h-[44px] px-4 rounded-xl bg-[#263E0F] hover:bg-[#111B07] active:bg-[#0B1204] text-white text-sm font-bold inline-flex items-center gap-2 transition-colors disabled:opacity-60 disabled:cursor-not-allowed'
+  const secondaryClass =
+    'min-h-[44px] px-3.5 rounded-xl border border-[#E2DACA] bg-white hover:border-[#263E0F] hover:bg-[#FAF8F4] text-xs font-bold text-[#17210E] inline-flex items-center gap-1.5 transition-colors'
+
+  async function advance(next: OrderStatus) {
+    if (await onStatusChange(next)) {
+      setDispatching(false)
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      {dispatching ? (
+        <div className="p-3.5 rounded-xl bg-[#FAF8F4] border border-[#E2DACA] space-y-3">
+          <div>
+            <label htmlFor={dispatchNoteId} className="block text-xs font-bold text-[#17210E] mb-1">
+              Rider or tracking note <span className="font-normal text-[#4A5240]">(optional)</span>
+            </label>
+            <input
+              id={dispatchNoteId}
+              autoFocus
+              type="text"
+              maxLength={500}
+              value={noteDraft}
+              onChange={(e) => onNoteChange(e.target.value)}
+              placeholder="e.g. GIG waybill 1234567, or rider Tunde 0803 000 0000"
+              aria-describedby={`${dispatchNoteId}-hint`}
+              className="w-full min-h-[44px] px-3 rounded-xl border border-[#8C8270] bg-white text-sm"
+            />
+            <p id={`${dispatchNoteId}-hint`} className="mt-1 text-xs text-[#4A5240]">
+              The customer sees this on their tracking page.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={busy} onClick={() => advance('dispatched')} className={primaryClass}>
+              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Truck className="w-4 h-4 text-[#E6C975]" />}
+              <span>{busy ? 'Updating…' : 'Confirm dispatch'}</span>
+            </button>
+            <button type="button" disabled={busy} onClick={() => setDispatching(false)} className={secondaryClass}>
+              Back
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          {isPending && (
+            <button
+              type="button"
+              disabled={anyBusy}
+              onClick={order.receiptUrl ? onOpenReceipt : () => advance('payment_confirmed')}
+              className={primaryClass}
+            >
+              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4 text-[#E6C975]" />}
+              <span>{order.receiptUrl ? 'Review receipt and verify' : 'Verify payment'}</span>
+            </button>
+          )}
+
+          {step && (
+            <button
+              type="button"
+              disabled={anyBusy}
+              onClick={() => (step.next === 'dispatched' ? setDispatching(true) : advance(step.next))}
+              className={primaryClass}
+            >
+              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4 text-[#E6C975]" />}
+              <span>{busy ? 'Updating…' : step.label}</span>
+            </button>
+          )}
+
+          {!isPending && order.receiptUrl && (
+            <button type="button" onClick={onOpenReceipt} className={secondaryClass}>
+              <Eye className="w-3.5 h-3.5" />
+              <span>View receipt</span>
+            </button>
+          )}
+
+          {waPhone && (
+            <a
+              href={`https://wa.me/${waPhone}?text=${encodeURIComponent(
+                `Hello ${order.customerName}, thank you for your Crafty Cottage order (${order.orderCode}).`
+              )}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={secondaryClass}
+            >
+              <MessageCircle className="w-3.5 h-3.5 text-[#263E0F]" />
+              <span>WhatsApp</span>
+            </a>
+          )}
+
+          <button
+            type="button"
+            aria-expanded={moreOpen}
+            aria-controls={morePanelId}
+            onClick={() => setMoreOpen((o) => !o)}
+            className="ml-auto min-h-[44px] px-3 rounded-xl text-xs font-bold text-[#4A5240] hover:text-[#17210E] hover:bg-[#F4EFE6] inline-flex items-center gap-1 transition-colors"
+          >
+            <span>More</span>
+            <ChevronDown className={`w-4 h-4 transition-transform duration-150 ${moreOpen ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
+      )}
+
+      {moreOpen && !dispatching && (
+        <div
+          id={morePanelId}
+          className="grid grid-cols-1 md:grid-cols-12 gap-4 pt-3 border-t border-[#F4EFE6]"
+        >
+          <div className="md:col-span-7">
+            <label htmlFor={noteId} className="block text-xs font-bold text-[#17210E] mb-1">
+              Delivery note <span className="font-normal text-[#4A5240]">(shown on the tracking page)</span>
+            </label>
+            <div className="flex gap-2">
+              <input
+                id={noteId}
+                type="text"
+                maxLength={500}
+                value={noteDraft}
+                onChange={(e) => onNoteChange(e.target.value)}
+                placeholder="Rider, waybill or pickup details"
+                className="flex-1 min-w-0 min-h-[44px] px-3 rounded-xl border border-[#E2DACA] bg-[#FAF8F4] text-xs"
+              />
+              <button
+                type="button"
+                disabled={anyBusy || !noteChanged}
+                onClick={() => onStatusChange(order.status)}
+                className={`${secondaryClass} shrink-0 disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                Save note
+              </button>
+            </div>
+          </div>
+
+          <div className="md:col-span-5">
+            <label htmlFor={`order-status-${order.id}`} className="block text-xs font-bold text-[#17210E] mb-1">
+              Correct the status
+            </label>
+            <select
+              id={`order-status-${order.id}`}
+              disabled={anyBusy}
+              value={order.status}
+              aria-describedby={`order-status-${order.id}-hint`}
+              onChange={(e) => {
+                const next = e.target.value as OrderStatus
+                if (next === 'cancelled') onRequestCancel()
+                else onStatusChange(next)
+              }}
+              className="w-full min-h-[44px] px-3 rounded-xl border border-[#E2DACA] bg-[#FAF8F4] text-xs font-semibold"
+            >
+              {(Object.keys(STATUS_LABELS) as OrderStatus[]).map((st) => (
+                <option key={st} value={st}>
+                  {STATUS_LABELS[st].label}
+                </option>
+              ))}
+            </select>
+            <p id={`order-status-${order.id}-hint`} className="mt-1 text-xs text-[#4A5240]">
+              Only to fix a mistake. Moving to a paid status takes the items off stock if they aren’t already.
+            </p>
+          </div>
+
+          {order.status !== 'cancelled' && (
+            <div className="md:col-span-12">
+              <button
+                type="button"
+                disabled={anyBusy}
+                onClick={onRequestCancel}
+                className="min-h-[44px] px-3 rounded-xl text-xs font-bold text-[#B42318] hover:bg-red-50 inline-flex items-center gap-1.5 transition-colors disabled:opacity-50"
+              >
+                <XCircle className="w-4 h-4" />
+                <span>Cancel order</span>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function AdminOrders({ orders, products, deliveryZones, onRefresh, initialStatusFilter }: Props) {
   const { showToast } = useCart()
   const [filterChannel, setFilterChannel] = useState<'all' | OrderChannel>('all')
-  const [filterStatus, setFilterStatus] = useState<'all' | OrderStatus>('all')
+  const [filterStatus, setFilterStatus] = useState<'all' | OrderStatus>(initialStatusFilter ?? 'all')
   const [offlineModalOpen, setOfflineModalOpen] = useState(false)
   const [receiptModalOrder, setReceiptModalOrder] = useState<Order | null>(null)
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({})
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null)
+  const [restockOnCancel, setRestockOnCancel] = useState(true)
   const receiptRef = useDialogFocus<HTMLDivElement>(Boolean(receiptModalOrder))
 
   useEffect(() => {
@@ -125,21 +449,36 @@ export function AdminOrders({ orders, products, onRefresh }: Props) {
     return matchesChannel && matchesStatus
   })
 
-  async function handleStatusChange(order: Order, nextStatus: OrderStatus): Promise<boolean> {
+  async function handleStatusChange(
+    order: Order,
+    nextStatus: OrderStatus,
+    options: { restock?: boolean } = {}
+  ): Promise<boolean> {
     if (updatingId) return false
     setUpdatingId(order.id)
     try {
       const note = noteDrafts[order.id] ?? order.dispatchNote ?? ''
-      await updateOrderStatus(order, nextStatus, note)
+      const { stockChange } = await updateOrderStatus(order, nextStatus, note, options)
       await onRefresh()
+      const units = Math.abs(stockChange)
+      const unitText = `${units} ${units === 1 ? 'item' : 'items'}`
+      const stockText =
+        stockChange > 0 ? ` ${unitText} put back in stock.` : stockChange < 0 ? ` ${unitText} taken off stock.` : ''
       showToast(
-        nextStatus === 'payment_confirmed'
-          ? `Payment verified for ${order.orderCode} and inventory stock updated!`
-          : `Order ${order.orderCode} updated to ${STATUS_LABELS[nextStatus].label}.`
+        nextStatus === 'payment_confirmed' && order.status === 'pending_verification'
+          ? `Payment verified for ${order.orderCode}.${stockText}`
+          : nextStatus === 'cancelled'
+            ? `${order.orderCode} cancelled.${stockText}`
+            : `${order.orderCode} is now ${STATUS_LABELS[nextStatus].label.toLowerCase()}.${stockText}`
       )
       return true
-    } catch {
-      showToast(`Could not update ${order.orderCode}. Check your connection and try again.`, 'error')
+    } catch (err) {
+      showToast(
+        err instanceof StockShortageError
+          ? `${order.orderCode}: ${err.message}`
+          : `Could not update ${order.orderCode}. Check your connection and try again.`,
+        'error'
+      )
       return false
     } finally {
       setUpdatingId(null)
@@ -151,7 +490,7 @@ export function AdminOrders({ orders, products, onRefresh }: Props) {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div>
           <h2 className="font-serif-display text-2xl font-bold text-[#17210E]">
-            Orders &amp; Offline Sales
+            Orders and offline sales
           </h2>
           <p className="text-xs text-[#4A5240]">
             Verify online transfer receipts, record offline walk-in or DM sales, and update delivery status.
@@ -203,7 +542,7 @@ export function AdminOrders({ orders, products, onRefresh }: Props) {
           </p>
           <p className="text-sm text-[#4A5240]">
             {orders.length === 0
-              ? 'Customer checkout orders will appear here, or you can log an offline studio/DM purchase.'
+              ? 'Customer checkout orders will appear here, or you can log an in-person or DM purchase.'
               : 'Try resetting the channel or status filter, or record a new offline purchase.'}
           </p>
           <div className="flex flex-wrap justify-center gap-2 pt-1">
@@ -239,7 +578,12 @@ export function AdminOrders({ orders, products, onRefresh }: Props) {
               ? `234${phoneDigits.slice(1)}`
               : phoneDigits
             const zoneOrSource = order.offlineSource || order.deliveryZone
-            const totalIssues = order.status === 'pending_verification' ? auditOrderTotals(order, products) : []
+            // Units this order is holding off the shelf right now (what a cancel could put back).
+            const heldUnits = isStockDeducted(order)
+              ? Array.from(stockHeldByOrder(order.items).values()).reduce((n, h) => n + h.quantity, 0)
+              : 0
+            const totalIssues =
+              order.status === 'pending_verification' ? auditOrderTotals(order, products, deliveryZones) : []
 
             return (
               <div
@@ -315,102 +659,67 @@ export function AdminOrders({ orders, products, onRefresh }: Props) {
                   )}
                 </ul>
 
-                {/* Actions Row */}
-                <div className="flex flex-wrap items-center gap-2.5">
-                  {order.receiptUrl && (
-                    <button
-                      type="button"
-                      onClick={() => setReceiptModalOrder(order)}
-                      className="min-h-[44px] px-3.5 rounded-xl border border-[#E2DACA] hover:border-[#263E0F] text-xs font-bold text-[#17210E] flex items-center gap-1.5"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>Inspect receipt</span>
-                    </button>
-                  )}
-
-                  {order.status === 'pending_verification' && (
-                    <button
-                      type="button"
-                      disabled={updatingId === order.id}
-                      onClick={() => handleStatusChange(order, 'payment_confirmed')}
-                      className="min-h-[44px] px-4 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-xs font-bold flex items-center gap-1.5"
-                    >
-                      {updatingId === order.id ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-[#E6C975]" />
-                      )}
-                      <span>Verify payment</span>
-                    </button>
-                  )}
-
-                  <select
-                    aria-label={`Change status for ${order.orderCode}`}
-                    disabled={updatingId === order.id}
-                    value={order.status}
-                    onChange={(e) => {
-                      const next = e.target.value as OrderStatus
-                      if (next === 'cancelled') {
-                        setConfirmCancelId(order.id)
-                        return
-                      }
-                      handleStatusChange(order, next)
-                    }}
-                    className="min-h-[44px] px-3 rounded-xl border border-[#E2DACA] bg-[#FAF8F4] text-xs font-semibold"
-                  >
-                    {(Object.keys(STATUS_LABELS) as OrderStatus[]).map((st) => (
-                      <option key={st} value={st}>
-                        {STATUS_LABELS[st].label}
-                      </option>
-                    ))}
-                  </select>
-
-                  <input
-                    type="text"
-                    value={noteDrafts[order.id] ?? order.dispatchNote ?? ''}
-                    onChange={(e) =>
-                      setNoteDrafts((d) => ({ ...d, [order.id]: e.target.value }))
-                    }
-                    aria-label={`Dispatch or rider note for ${order.orderCode}`}
-                    placeholder="Dispatch / rider note..."
-                    className="flex-1 min-w-[180px] min-h-[44px] px-3 rounded-xl border border-[#E2DACA] bg-[#FAF8F4] text-xs"
-                  />
-
-                  <button
-                    type="button"
-                    disabled={updatingId === order.id}
-                    onClick={() => handleStatusChange(order, order.status)}
-                    className="min-h-[44px] px-3 rounded-xl border border-[#E2DACA] hover:bg-[#F4EFE6] text-xs font-bold"
-                  >
-                    Save note
-                  </button>
-
-                  {waPhone && (
-                    <a
-                      href={`https://wa.me/${waPhone}?text=${encodeURIComponent(
-                        `Hello ${order.customerName}, thank you for your Crafty Cottage order (${order.orderCode}).`
-                      )}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="min-h-[44px] px-3 rounded-xl border border-[#263E0F]/40 text-[#263E0F] hover:bg-[#EAF2DE] text-xs font-bold flex items-center gap-1"
-                    >
-                      <MessageCircle className="w-3.5 h-3.5" />
-                      <span>WhatsApp</span>
-                    </a>
-                  )}
-                </div>
+                <OrderActions
+                  order={order}
+                  busy={updatingId === order.id}
+                  anyBusy={Boolean(updatingId)}
+                  waPhone={waPhone}
+                  noteDraft={noteDrafts[order.id] ?? order.dispatchNote ?? ''}
+                  onNoteChange={(value) => setNoteDrafts((d) => ({ ...d, [order.id]: value }))}
+                  onStatusChange={(next) => handleStatusChange(order, next)}
+                  onOpenReceipt={() => setReceiptModalOrder(order)}
+                  onRequestCancel={() => {
+                    // Default: put stock back, except after delivery (the bag is with the customer).
+                    setRestockOnCancel(order.status !== 'delivered')
+                    setConfirmCancelId(order.id)
+                  }}
+                />
 
                 {confirmCancelId === order.id && (
                   <div
                     role="alertdialog"
                     aria-labelledby={`cancel-title-${order.id}`}
-                    className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-red-50 border border-red-200"
+                    aria-describedby={`cancel-desc-${order.id}`}
+                    className="p-3.5 rounded-xl bg-red-50 border border-red-200 space-y-3"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape' && updatingId !== order.id) setConfirmCancelId(null)
+                    }}
                   >
-                    <p id={`cancel-title-${order.id}`} className="text-sm text-[#7A1B14]">
-                      <strong>Cancel {order.orderCode}?</strong> The customer will see
-                      &quot;Order cancelled&quot; on the tracking page. Stock is not returned automatically.
-                    </p>
-                    <div className="flex gap-2">
+                    <div className="text-sm text-[#7A1B14] space-y-0.5">
+                      <p id={`cancel-title-${order.id}`} className="font-bold">
+                        Cancel {order.orderCode}?
+                      </p>
+                      <p id={`cancel-desc-${order.id}`}>
+                        The customer will see &quot;Order cancelled&quot; on the tracking page.
+                        {heldUnits === 0 &&
+                          (order.status === 'pending_verification'
+                            ? ' No stock was taken for this order, so there is nothing to put back.'
+                            : ' This order isn’t holding any stock.')}
+                      </p>
+                    </div>
+
+                    {heldUnits > 0 && (
+                      <label className="flex items-start gap-2.5 min-h-[44px] p-2.5 -mx-1 rounded-lg bg-white/70 border border-red-100 cursor-pointer text-sm text-[#17210E]">
+                        <input
+                          type="checkbox"
+                          checked={restockOnCancel}
+                          onChange={(e) => setRestockOnCancel(e.target.checked)}
+                          className="mt-0.5 w-4 h-4 accent-[#263E0F] shrink-0"
+                        />
+                        <span>
+                          <strong className="block">
+                            Put {heldUnits} {heldUnits === 1 ? 'item' : 'items'} back in stock
+                          </strong>
+                          <span className="text-xs text-[#4A5240]">
+                            {order.status === 'delivered'
+                              ? 'Only tick this if the customer has returned the bag to you.'
+                              : 'Untick if the bag is damaged or no longer available to sell.'}
+                          </span>
+                        </span>
+                      </label>
+                    )}
+
+                    <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
                         onClick={() => setConfirmCancelId(null)}
@@ -422,7 +731,8 @@ export function AdminOrders({ orders, products, onRefresh }: Props) {
                         type="button"
                         disabled={updatingId === order.id}
                         onClick={async () => {
-                          if (await handleStatusChange(order, 'cancelled')) setConfirmCancelId(null)
+                          const restock = heldUnits > 0 && restockOnCancel
+                          if (await handleStatusChange(order, 'cancelled', { restock })) setConfirmCancelId(null)
                         }}
                         className="min-h-[44px] px-4 rounded-xl bg-[#B42318] hover:bg-[#912018] text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-60"
                       >
@@ -473,14 +783,7 @@ export function AdminOrders({ orders, products, onRefresh }: Props) {
 
             <div className="bg-[#FAF8F4] rounded-2xl border border-[#E2DACA] p-2 max-h-[60vh] overflow-auto flex items-center justify-center">
               {isPdfReceipt(receiptModalOrder.receiptUrl) ? (
-                <a
-                  href={receiptModalOrder.receiptUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="py-10 text-sm font-bold text-[#263E0F] underline"
-                >
-                  Open PDF receipt in a new tab
-                </a>
+                <PdfReceipt url={receiptModalOrder.receiptUrl} orderCode={receiptModalOrder.orderCode} />
               ) : (
                 <img
                   src={receiptModalOrder.receiptUrl}
@@ -491,7 +794,7 @@ export function AdminOrders({ orders, products, onRefresh }: Props) {
             </div>
 
             {receiptModalOrder.status === 'pending_verification' && (
-              <TotalsWarning issues={auditOrderTotals(receiptModalOrder, products)} />
+              <TotalsWarning issues={auditOrderTotals(receiptModalOrder, products, deliveryZones)} />
             )}
 
             {receiptModalOrder.status === 'pending_verification' && (

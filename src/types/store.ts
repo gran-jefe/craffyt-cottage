@@ -61,7 +61,10 @@ export interface Order {
   channel?: OrderChannel
   paymentMethod?: PaymentMethod
   offlineSource?: string
+  /** True while this order's items are taken off the shelf. */
   stockDeducted?: boolean
+  /** Set once the app has put this order's stock back (on cancel). */
+  stockRestored?: boolean
   dispatchNote?: string
   createdAt: string
   updatedAt: string
@@ -104,6 +107,5 @@ export interface StoreSettings {
   accountNumber: string
   whatsappNumber: string
   instagramHandle: string
-  studioLocation: string
   deliveryZones: DeliveryZone[]
 }

@@ -8,7 +8,7 @@ export function SiteFooter() {
         <div className="space-y-1.5">
           <div className="font-serif-display font-bold text-xl text-white">Crafty Cottage</div>
           <p className="text-sm">
-            Bead to perfection · Hand-beaded bags &amp; accessories, University of Ibadan, Oyo State
+            Bead to perfection · Hand-beaded bags and accessories
           </p>
           <p className="text-xs text-[#CFC6B2]/75">
             © 2026 Crafty Cottage. All rights reserved.

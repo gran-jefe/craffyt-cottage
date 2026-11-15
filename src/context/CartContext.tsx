@@ -42,7 +42,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!toast) return
-    const timer = setTimeout(() => setToast(null), 3800)
+    // Errors usually carry instructions, so give them time to be read.
+    const timer = setTimeout(() => setToast(null), toast.tone === 'error' ? 8000 : 3800)
     return () => clearTimeout(timer)
   }, [toast])
 
@@ -81,34 +82,44 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         showToast(`${product.name} is currently sold out.`, 'error')
         return
       }
-      setItems((prev) => {
-        const existing = prev.find((i) => i.productId === product.id)
-        if (existing) {
-          const nextQty = Math.min(product.stock, existing.quantity + qty)
-          if (nextQty === existing.quantity) {
-            showToast(`Only ${product.stock} piece(s) left in stock.`, 'error')
-            return prev
-          }
-          showToast(`Added another ${product.name} to your bag.`)
-          return prev.map((i) =>
+      // Decide the outcome from the current bag, then update state; toasts stay outside the
+      // state updater because React may run updaters twice.
+      const existing = items.find((i) => i.productId === product.id)
+      if (existing) {
+        const nextQty = Math.min(product.stock, existing.quantity + qty)
+        if (nextQty === existing.quantity) {
+          showToast(
+            `Only ${product.stock} ${product.stock === 1 ? 'piece' : 'pieces'} left, and they're all in your bag.`,
+            'error'
+          )
+          return
+        }
+        setItems((prev) =>
+          prev.map((i) =>
             i.productId === product.id ? { ...i, quantity: nextQty, maxStock: product.stock } : i
           )
-        }
-        showToast(`${product.name} added to your bag.`)
-        return [
-          ...prev,
-          {
-            productId: product.id,
-            name: product.name,
-            price: product.price,
-            imageUrl: product.imageUrl,
-            quantity: Math.min(qty, product.stock),
-            maxStock: product.stock,
-          },
-        ]
-      })
+        )
+        showToast(`Added another ${product.name} to your bag.`)
+        return
+      }
+      setItems((prev) =>
+        prev.some((i) => i.productId === product.id)
+          ? prev
+          : [
+              ...prev,
+              {
+                productId: product.id,
+                name: product.name,
+                price: product.price,
+                imageUrl: product.imageUrl,
+                quantity: Math.min(qty, product.stock),
+                maxStock: product.stock,
+              },
+            ]
+      )
+      showToast(`${product.name} added to your bag.`)
     },
-    [showToast]
+    [items, showToast]
   )
 
   const updateQuantity = useCallback((productId: string, qty: number) => {
@@ -189,7 +200,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       >
         {toast && (
           <div
-            role="status"
             className={`pointer-events-auto flex items-center gap-2.5 max-w-sm w-full px-4 py-3.5 rounded-xl text-sm font-medium shadow-xl border ${
               toast.tone === 'error'
                 ? 'bg-[#7A1B14] text-white border-red-400/30'

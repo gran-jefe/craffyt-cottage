@@ -12,7 +12,8 @@ import {
   Minus,
 } from 'lucide-react'
 import {
-  adjustProductStock,
+  ReceiptFileError,
+  adjustProductStockBy,
   deleteProduct,
   saveProduct,
   seedInitialProducts,
@@ -49,7 +50,8 @@ const EMPTY_FORM: ProductFormState = {
   stock: '5',
   tag: '',
   description: '',
-  imageUrl: '/images/products/dupree-gold.jpg',
+  // No default photo: a new piece must never go live wearing another bag's picture.
+  imageUrl: '',
   active: true,
   featured: false,
 }
@@ -119,8 +121,12 @@ export function AdminInventory({ products, onRefresh }: Props) {
       const url = await uploadMediaFile(file, 'products')
       setForm((prev) => ({ ...prev, imageUrl: url }))
       showToast('Product photo uploaded.')
-    } catch {
-      setFormError('Could not upload photo. Check Firebase Storage permissions.')
+    } catch (err) {
+      setFormError(
+        err instanceof ReceiptFileError
+          ? 'We couldn’t read this photo (iPhone HEIC photos often can’t be opened). Please use a JPG or PNG.'
+          : 'Could not upload the photo. Check your connection and try again.'
+      )
     } finally {
       setUploadingImg(false)
     }
@@ -145,7 +151,7 @@ export function AdminInventory({ products, onRefresh }: Props) {
       return
     }
     if (!form.imageUrl.trim()) {
-      setFormError('Please provide or upload a product photo.')
+      setFormError('Upload a photo of this piece (or paste its image URL) before saving.')
       return
     }
 
@@ -177,9 +183,9 @@ export function AdminInventory({ products, onRefresh }: Props) {
   async function handleStockDelta(product: Product, delta: number) {
     setBusyId(product.id)
     try {
-      await adjustProductStock(product.id, product.stock + delta)
+      const next = await adjustProductStockBy(product.id, delta)
       await onRefresh()
-      showToast(`Stock for ${product.name} updated to ${Math.max(0, product.stock + delta)}.`)
+      showToast(`Stock for ${product.name} updated to ${next}.`)
     } catch {
       showToast(`Could not update stock for ${product.name}. Check your connection and try again.`, 'error')
     } finally {
@@ -401,11 +407,22 @@ export function AdminInventory({ products, onRefresh }: Props) {
             <form onSubmit={handleSave} className="space-y-4">
               {/* Image preview + upload */}
               <div className="flex items-center gap-4">
-                <img
-                  src={form.imageUrl || '/images/products/dupree-gold.jpg'}
-                  alt="Product preview"
-                  className="w-20 h-20 rounded-xl object-cover bg-[#E8DEC8] border border-[#E2DACA] shrink-0"
-                />
+                {form.imageUrl ? (
+                  <img
+                    src={form.imageUrl}
+                    alt="Product preview"
+                    width={80}
+                    height={80}
+                    className="w-20 h-20 rounded-xl object-cover bg-[#E8DEC8] border border-[#E2DACA] shrink-0"
+                  />
+                ) : (
+                  <div
+                    aria-hidden="true"
+                    className="w-20 h-20 rounded-xl bg-[#F4EFE6] border border-dashed border-[#8C8270] text-[#4A5240] grid place-items-center shrink-0"
+                  >
+                    <Package className="w-6 h-6" />
+                  </div>
+                )}
                 <div className="flex-1 space-y-2">
                   <label
                     htmlFor="prod-img-upload"

@@ -184,14 +184,20 @@ service cloud.firestore {
         'deliveryZone', 'deliveryFee', 'address', 'notes',
         'items', 'subtotal', 'total', 'receiptUrl',
         'status', 'channel', 'paymentMethod', 'offlineSource', 'stockDeducted',
-        'dispatchNote', 'createdAt', 'updatedAt'
+        'stockRestored', 'dispatchNote', 'createdAt', 'updatedAt'
       ];
       let isOffline = 'channel' in existing && existing.channel == 'offline';
+      // stockDeducted / stockRestored track whether this order holds stock, so cancelling can
+      // put items back exactly once. stockRestored can be set but never cleared.
       return data.keys().hasOnly(allowedKeys) &&
         isValidOrderCore(data, isOffline) &&
-        data.diff(existing).affectedKeys().hasOnly(['status', 'dispatchNote', 'updatedAt']) &&
+        data.diff(existing).affectedKeys().hasOnly([
+          'status', 'dispatchNote', 'updatedAt', 'stockDeducted', 'stockRestored'
+        ]) &&
         isValidOrderStatus(data.status) &&
-        validOptionalString(data, 'dispatchNote', 500);
+        validOptionalString(data, 'dispatchNote', 500) &&
+        (!('stockRestored' in data) || data.stockRestored is bool) &&
+        (!('stockRestored' in existing) || existing.stockRestored != true || data.stockRestored == true);
     }
 
     function isValidOrderTracking(data, docOrderCode) {

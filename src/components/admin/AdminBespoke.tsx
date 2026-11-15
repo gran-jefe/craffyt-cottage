@@ -43,7 +43,7 @@ export function AdminBespoke({ requests, onRefresh }: Props) {
           Bespoke requests
         </h2>
         <p className="text-xs text-[#4A5240]">
-          Custom colour &amp; silhouette specs submitted by clients from the Custom Studio.
+          Custom colour &amp; silhouette specs submitted through the custom bag form.
         </p>
       </div>
 

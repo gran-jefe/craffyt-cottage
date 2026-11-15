@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { Search, Package, CheckCircle2, Truck, Clock, XCircle, Loader2, MessageCircle } from 'lucide-react'
 import { SiteHeader } from '@/components/SiteHeader'
 import { SiteFooter } from '@/components/SiteFooter'
-import { lookupOrderTracking } from '@/lib/storeService'
+import { fetchStoreSettings, lookupOrderTracking } from '@/lib/storeService'
 import { DEFAULT_STORE_SETTINGS, formatNaira } from '@/lib/defaults'
 import type { OrderStatus, OrderTrackingInfo } from '@/types/store'
 
@@ -46,6 +46,16 @@ function TrackContent() {
   const [searched, setSearched] = useState(false)
   const [result, setResult] = useState<OrderTrackingInfo | null>(null)
   const [lookupError, setLookupError] = useState(false)
+  const [whatsappNumber, setWhatsappNumber] = useState(DEFAULT_STORE_SETTINGS.whatsappNumber)
+
+  // Use the studio's saved WhatsApp number; the default only covers a failed or missing settings read.
+  useEffect(() => {
+    fetchStoreSettings()
+      .then((cfg) => {
+        if (cfg?.whatsappNumber) setWhatsappNumber(cfg.whatsappNumber)
+      })
+      .catch(() => {})
+  }, [])
 
   async function runLookup(code: string) {
     if (!code.trim()) return
@@ -79,7 +89,7 @@ function TrackContent() {
     <div className="max-w-2xl mx-auto px-4 sm:px-6 space-y-8">
       <div className="text-center space-y-2">
         <span className="text-xs font-bold uppercase tracking-widest text-[#355416]">
-          Live status
+          Order status
         </span>
         <h1 className="font-serif-display text-3xl sm:text-4xl font-bold text-[#111B07]">
           Track your order
@@ -140,7 +150,7 @@ function TrackContent() {
             Please double-check the reference code from your checkout confirmation screen.
           </p>
           <a
-            href={`https://wa.me/${DEFAULT_STORE_SETTINGS.whatsappNumber}?text=${encodeURIComponent(
+            href={`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(
               `Hello Crafty Cottage, I can't find my order${codeInput ? ` (${codeInput})` : ''} on the tracking page.`
             )}`}
             target="_blank"
@@ -148,7 +158,7 @@ function TrackContent() {
             className="mt-2 min-h-[44px] px-5 rounded-xl border border-[#263E0F] text-[#263E0F] hover:bg-[#EAF2DE] text-sm font-bold inline-flex items-center gap-2 transition-colors"
           >
             <MessageCircle className="w-4 h-4" />
-            <span>Ask the studio on WhatsApp</span>
+            <span>Ask us on WhatsApp</span>
           </a>
         </div>
       )}
@@ -225,7 +235,7 @@ function TrackContent() {
 
           {result.dispatchNote && result.status !== 'cancelled' && (
             <div className="p-4 rounded-xl bg-[#FAF8F4] border border-[#E2DACA] text-xs text-[#17210E]">
-              <span className="font-bold block mb-0.5">Studio note and tracking info</span>
+              <span className="font-bold block mb-0.5">Delivery note and tracking info</span>
               <span>{result.dispatchNote}</span>
             </div>
           )}

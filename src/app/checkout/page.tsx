@@ -19,13 +19,24 @@ import {
 import { SiteHeader } from '@/components/SiteHeader'
 import { SiteFooter } from '@/components/SiteFooter'
 import { useCart } from '@/context/CartContext'
-import { DEFAULT_STORE_SETTINGS, formatNaira } from '@/lib/defaults'
-import { createOrder, fetchProducts, fetchStoreSettings, uploadMediaFile } from '@/lib/storeService'
+import { DEFAULT_STORE_SETTINGS, formatNaira, hasPaymentDetails } from '@/lib/defaults'
+import {
+  RECEIPT_PDF_MAX_BYTES,
+  ReceiptFileError,
+  checkReceiptFile,
+  createOrder,
+  fetchProducts,
+  fetchStoreSettings,
+  formatFileSize,
+  uploadMediaFile,
+} from '@/lib/storeService'
 import type { Order, StoreSettings } from '@/types/store'
 
 export default function CheckoutPage() {
   const { items, subtotal, clearCart, showToast, reconcileWithProducts } = useCart()
   const [settings, setSettings] = useState<StoreSettings>(DEFAULT_STORE_SETTINGS)
+  const [paymentStatus, setPaymentStatus] = useState<'loading' | 'ready' | 'unavailable' | 'error'>('loading')
+  const [settingsReloadKey, setSettingsReloadKey] = useState(0)
 
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
@@ -76,18 +87,33 @@ export default function CheckoutPage() {
     }
   }
 
+  // Payment details only render from settings the owner actually saved. Until then the
+  // customer sees why they can't pay yet, never a placeholder account.
   useEffect(() => {
+    let active = true
+    setPaymentStatus('loading')
     fetchStoreSettings()
       .then((cfg) => {
-        setSettings(cfg)
-        if (cfg.deliveryZones.length > 0) {
-          setSelectedZoneId((prev) =>
-            cfg.deliveryZones.some((z) => z.id === prev) ? prev : cfg.deliveryZones[0].id
-          )
+        if (!active) return
+        if (cfg) {
+          setSettings(cfg)
+          if (cfg.deliveryZones.length > 0) {
+            setSelectedZoneId((prev) =>
+              cfg.deliveryZones.some((z) => z.id === prev) ? prev : cfg.deliveryZones[0].id
+            )
+          }
         }
+        setPaymentStatus(hasPaymentDetails(cfg) ? 'ready' : 'unavailable')
       })
-      .catch(() => {})
-  }, [])
+      .catch(() => {
+        if (active) setPaymentStatus('error')
+      })
+    return () => {
+      active = false
+    }
+  }, [settingsReloadKey])
+
+  const paymentReady = paymentStatus === 'ready'
 
   const selectedZone =
     settings.deliveryZones.find((z) => z.id === selectedZoneId) || settings.deliveryZones[0]
@@ -108,9 +134,14 @@ export default function CheckoutPage() {
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
+    // Reset so choosing the same file again after an error still fires onChange.
+    e.target.value = ''
     if (!file) return
-    if (file.size > 10 * 1024 * 1024) {
-      setErrors((prev) => ({ ...prev, receipt: 'Receipt file must be under 10 MB.' }))
+    const problem = checkReceiptFile(file)
+    if (problem) {
+      setReceiptFile(null)
+      setReceiptPreview('')
+      setErrors((prev) => ({ ...prev, receipt: problem }))
       return
     }
     setErrors((prev) => {
@@ -150,7 +181,7 @@ export default function CheckoutPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!validateForm() || !receiptFile || items.length === 0) return
+    if (!paymentReady || !validateForm() || !receiptFile || items.length === 0) return
 
     setSubmitting(true)
 
@@ -196,10 +227,16 @@ export default function CheckoutPage() {
       showToast(`Order ${created.orderCode} submitted!`)
     } catch (err) {
       console.error(err)
-      setErrors({
-        submit:
-          'We could not complete your checkout right now. Please check your connection and try again.',
-      })
+      if (err instanceof ReceiptFileError) {
+        // The file itself is the problem: say so next to the upload, not as a connection error.
+        setErrors({ receipt: err.message })
+        document.getElementById('receipt-upload')?.focus()
+      } else {
+        setErrors({
+          submit:
+            'We could not complete your checkout right now. Please check your connection and try again. Your details are saved on this page.',
+        })
+      }
     } finally {
       setSubmitting(false)
     }
@@ -257,7 +294,7 @@ export default function CheckoutPage() {
                   className="flex-1 min-h-[48px] px-5 rounded-xl border border-[#263E0F] text-[#263E0F] hover:bg-[#EAF2DE] text-sm font-bold flex items-center justify-center gap-2 transition-colors"
                 >
                   <MessageCircle className="w-4 h-4" />
-                  <span>Notify the studio on WhatsApp</span>
+                  <span>Let us know on WhatsApp</span>
                 </a>
               </div>
             </div>
@@ -469,12 +506,69 @@ export default function CheckoutPage() {
                           2. Direct bank transfer
                         </h2>
                         <p className="text-xs text-[#4A5240] mt-0.5">
-                          Transfer <strong>{formatNaira(total)}</strong> to the account below, then upload your receipt.
+                          {paymentReady ? (
+                            <>Transfer <strong>{formatNaira(total)}</strong> to the account below, then upload your receipt.</>
+                          ) : (
+                            <>Your total is <strong>{formatNaira(total)}</strong>. Bank details appear here once confirmed.</>
+                          )}
                         </p>
                       </div>
                       <Landmark className="w-6 h-6 text-[#263E0F] shrink-0" />
                     </div>
 
+                    {paymentStatus === 'loading' && (
+                      <div
+                        role="status"
+                        aria-label="Loading bank details"
+                        className="bg-[#1A2A0C] rounded-2xl p-5 space-y-3 animate-pulse"
+                      >
+                        <div className="h-4 w-1/3 rounded-md bg-[#3A5222]" />
+                        <div className="h-4 w-1/2 rounded-md bg-[#3A5222]" />
+                        <div className="h-8 w-2/3 rounded-md bg-[#3A5222]" />
+                      </div>
+                    )}
+
+                    {(paymentStatus === 'error' || paymentStatus === 'unavailable') && (
+                      <div
+                        role="alert"
+                        className="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-sm text-amber-950 space-y-3"
+                      >
+                        <p>
+                          <strong className="block">
+                            {paymentStatus === 'error'
+                              ? 'We couldn’t load our bank details'
+                              : 'Online payment is paused right now'}
+                          </strong>
+                          {paymentStatus === 'error'
+                            ? 'Please don’t send a transfer yet. Check your connection and try again, or confirm the account with us on WhatsApp.'
+                            : 'Our bank details aren’t available yet. Please don’t send a transfer; message us on WhatsApp to complete your order.'}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {paymentStatus === 'error' && (
+                            <button
+                              type="button"
+                              onClick={() => setSettingsReloadKey((k) => k + 1)}
+                              className="min-h-[44px] px-4 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-xs font-bold transition-colors"
+                            >
+                              Try again
+                            </button>
+                          )}
+                          <a
+                            href={`https://wa.me/${settings.whatsappNumber}?text=${encodeURIComponent(
+                              `Hello Crafty Cottage, I'd like to pay for my order (${formatNaira(total)}). Please share your bank details.`
+                            )}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="min-h-[44px] px-4 rounded-xl border border-[#263E0F] text-[#263E0F] hover:bg-amber-100 text-xs font-bold inline-flex items-center gap-1.5 transition-colors"
+                          >
+                            <MessageCircle className="w-4 h-4" />
+                            <span>Message us on WhatsApp</span>
+                          </a>
+                        </div>
+                      </div>
+                    )}
+
+                    {paymentReady && (
                     <div className="bg-[#1A2A0C] text-[#FAF8F4] rounded-2xl p-5 space-y-3">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                         <div>
@@ -504,6 +598,7 @@ export default function CheckoutPage() {
                         </button>
                       </div>
                     </div>
+                    )}
 
                     <div>
                       <label htmlFor="receipt-upload" className="block text-xs font-bold text-[#17210E] mb-2">
@@ -518,7 +613,7 @@ export default function CheckoutPage() {
                           {receiptFile ? receiptFile.name : 'Tap to choose receipt image or PDF'}
                         </span>
                         <span id="receipt-hint" className="text-xs text-[#4A5240]">
-                          JPG, PNG, or PDF · Max 10 MB
+                          JPG or PNG up to 10 MB · PDF up to {formatFileSize(RECEIPT_PDF_MAX_BYTES)}
                         </span>
                         <input
                           id="receipt-upload"
@@ -617,8 +712,9 @@ export default function CheckoutPage() {
 
                   <button
                     type="submit"
-                    disabled={submitting}
-                    className="w-full min-h-[48px] px-5 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-sm font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-60 shadow-sm"
+                    disabled={submitting || !paymentReady}
+                    aria-describedby={paymentReady ? undefined : 'payment-paused-hint'}
+                    className="w-full min-h-[48px] px-5 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-sm font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-60 disabled:cursor-not-allowed shadow-sm"
                   >
                     {submitting ? (
                       <>
@@ -632,6 +728,13 @@ export default function CheckoutPage() {
                       </>
                     )}
                   </button>
+                  {!paymentReady && (
+                    <p id="payment-paused-hint" className="text-xs text-[#4A5240] text-center">
+                      {paymentStatus === 'loading'
+                        ? 'Loading our bank details…'
+                        : 'Ordering is paused until our bank details are available.'}
+                    </p>
+                  )}
                 </aside>
               </form>
             </div>

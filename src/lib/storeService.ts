@@ -64,15 +64,52 @@ function generateOrderCode(): string {
   return `CC-${suffix}`
 }
 
+/** True when uploads go to Cloud Storage; otherwise files are stored inline as compressed data URLs. */
+export const usesCloudStorage = process.env.NEXT_PUBLIC_ENABLE_FIREBASE_STORAGE === 'true'
+
+/** Inline storage keeps PDFs small enough to fit in a Firestore document (rules cap at ~700 KB of base64). */
+export const RECEIPT_PDF_MAX_BYTES = usesCloudStorage ? 10 * 1024 * 1024 : 450 * 1024
+export const RECEIPT_MAX_BYTES = 10 * 1024 * 1024
+
+/** A problem with the file itself, with a message the customer can act on. */
+export class ReceiptFileError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ReceiptFileError'
+  }
+}
+
+/** Returns a customer-readable problem with a receipt file, or null when it can be uploaded. */
+export function checkReceiptFile(file: File): string | null {
+  const isPdf = file.type === 'application/pdf'
+  if (!isPdf && !file.type.startsWith('image/')) {
+    return 'Please upload a screenshot (JPG or PNG) or a PDF of your transfer receipt.'
+  }
+  if (isPdf && file.size > RECEIPT_PDF_MAX_BYTES) {
+    return `This PDF is ${formatFileSize(file.size)}, and PDFs must be under ${formatFileSize(RECEIPT_PDF_MAX_BYTES)}. Please upload a screenshot of the receipt instead.`
+  }
+  if (file.size > RECEIPT_MAX_BYTES) {
+    return `This file is ${formatFileSize(file.size)}. Receipts must be under 10 MB.`
+  }
+  return null
+}
+
+export function formatFileSize(bytes: number): string {
+  return bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.ceil(bytes / 1024)} KB`
+}
+
 async function fileToCompressedDataUrl(file: File): Promise<string> {
   if (file.type === 'application/pdf') {
-    if (file.size > 450 * 1024) {
-      throw new Error('PDF receipt exceeds 450 KB limit. Please upload a screenshot image instead.')
+    if (file.size > RECEIPT_PDF_MAX_BYTES) {
+      throw new ReceiptFileError(
+        `PDFs must be under ${formatFileSize(RECEIPT_PDF_MAX_BYTES)}. Please upload a screenshot of the receipt instead.`
+      )
     }
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = () => resolve(String(reader.result || ''))
-      reader.onerror = () => reject(new Error('Could not read file'))
+      reader.onerror = () =>
+        reject(new ReceiptFileError('We couldn’t read this PDF. Please choose it again, or upload a screenshot.'))
       reader.readAsDataURL(file)
     })
   }
@@ -91,24 +128,28 @@ async function fileToCompressedDataUrl(file: File): Promise<string> {
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
         resolve(canvas.toDataURL('image/jpeg', 0.72))
       }
-      img.onerror = () => reject(new Error('Invalid image file'))
+      img.onerror = () =>
+        reject(
+          new ReceiptFileError(
+            'We couldn’t read this image (iPhone HEIC photos often can’t be opened). Please upload a JPG or PNG screenshot instead.'
+          )
+        )
       img.src = String(reader.result || '')
     }
-    reader.onerror = () => reject(new Error('Could not read file'))
+    reader.onerror = () =>
+      reject(new ReceiptFileError('We couldn’t read this file. Please choose it again, or upload a screenshot.'))
     reader.readAsDataURL(file)
   })
 }
 
 /* ---------- Auth / Admin check ---------- */
+/**
+ * Mirrors the Firestore/Storage rules exactly: an `admin: true` custom claim or an admins/{uid}
+ * document. There is deliberately no email allowlist here: NEXT_PUBLIC_* values ship in the public
+ * bundle, and the rules wouldn't honour it anyway.
+ */
 export async function checkAdminAccess(user: User | null): Promise<boolean> {
   if (!user) return false
-  const allowlist = (process.env.NEXT_PUBLIC_ADMIN_EMAILS || '')
-    .split(',')
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean)
-  if (user.email && allowlist.includes(user.email.toLowerCase())) {
-    return true
-  }
   if (!isFirebaseConfigured || !db) return false
   try {
     const token = await user.getIdTokenResult()
@@ -125,8 +166,7 @@ export async function uploadMediaFile(
   file: File,
   folder: 'products' | 'receipts'
 ): Promise<string> {
-  const storageEnabled = process.env.NEXT_PUBLIC_ENABLE_FIREBASE_STORAGE === 'true'
-  if (storageEnabled && isFirebaseConfigured && storage) {
+  if (usesCloudStorage && isFirebaseConfigured && storage) {
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
     const storageRef = ref(storage, `${folder}/${Date.now()}-${safeName}`)
     await uploadBytes(storageRef, file, { contentType: file.type })
@@ -200,18 +240,36 @@ export async function saveProduct(
   return newProduct
 }
 
-export async function adjustProductStock(productId: string, newStock: number): Promise<void> {
-  const safeStock = Math.max(0, Math.floor(newStock))
+/**
+ * Moves stock by `delta` relative to the value stored right now, never to an absolute number
+ * computed from a possibly stale screen. A sale confirmed at the same moment is therefore kept.
+ * Returns the new stock count.
+ */
+export async function adjustProductStockBy(productId: string, delta: number): Promise<number> {
+  const step = Math.trunc(delta)
   const now = new Date().toISOString()
   if (isFirebaseConfigured && db) {
-    await updateDoc(doc(db, 'products', productId), { stock: safeStock, updatedAt: now })
-    return
+    const firestore = db
+    return runTransaction(firestore, async (tx) => {
+      const ref = doc(firestore, 'products', productId)
+      const snap = await tx.get(ref)
+      if (!snap.exists()) throw new Error('Product no longer exists')
+      const next = Math.max(0, Math.floor(Number(snap.data().stock) || 0) + step)
+      tx.update(ref, { stock: next, updatedAt: now })
+      return next
+    })
   }
   const rows = readDemo<Product[]>(DEMO_KEYS.products, DEFAULT_PRODUCTS)
+  let next = 0
   writeDemo(
     DEMO_KEYS.products,
-    rows.map((p) => (p.id === productId ? { ...p, stock: safeStock, updatedAt: now } : p))
+    rows.map((p) => {
+      if (p.id !== productId) return p
+      next = Math.max(0, p.stock + step)
+      return { ...p, stock: next, updatedAt: now }
+    })
   )
+  return next
 }
 
 export async function deleteProduct(productId: string): Promise<void> {
@@ -315,7 +373,7 @@ export async function createOfflineOrder(input: CreateOfflineOrderInput): Promis
     parsedSoldAt && !Number.isNaN(parsedSoldAt.getTime()) ? parsedSoldAt.toISOString() : now
   const orderCode = generateOrderCode()
   const itemCount = input.items.reduce((sum, i) => sum + i.quantity, 0)
-  const cleanSource = input.offlineSource.trim() || 'In-Studio / Walk-in'
+  const cleanSource = input.offlineSource.trim() || 'In person / Walk-in'
   const deliveryFee = Math.max(0, Number(input.deliveryFee) || 0)
   const subtotal = Number(input.subtotal)
   const total = Number(input.total)
@@ -412,70 +470,183 @@ export async function fetchOrders(): Promise<Order[]> {
 
 const PAID_STATUSES: OrderStatus[] = ['payment_confirmed', 'processing', 'dispatched', 'delivered']
 
-/** Stock leaves the shelf exactly once: when an order first moves out of pending into any paid state. */
-function shouldDeductStock(currentStatus: OrderStatus, nextStatus: OrderStatus): boolean {
-  return currentStatus === 'pending_verification' && PAID_STATUSES.includes(nextStatus)
+/**
+ * Whether this order currently has its items taken off the shelf.
+ * Orders record this explicitly (`stockDeducted`). Older online orders saved before the flag
+ * existed are inferred from their status: paid statuses had stock deducted, others didn't.
+ */
+export function isStockDeducted(order: Pick<Order, 'status' | 'channel' | 'stockDeducted'>): boolean {
+  if (typeof order.stockDeducted === 'boolean') return order.stockDeducted
+  if (order.channel === 'offline') return false
+  return PAID_STATUSES.includes(order.status)
+}
+
+/** Catalogue quantities held by an order, merged per product (custom offline lines hold no stock). */
+export function stockHeldByOrder(items: OrderItem[]): Map<string, { name: string; quantity: number }> {
+  const held = new Map<string, { name: string; quantity: number }>()
+  for (const item of items) {
+    if (!item.productId || item.productId === 'custom') continue
+    const prev = held.get(item.productId)
+    held.set(item.productId, { name: item.name, quantity: (prev?.quantity ?? 0) + item.quantity })
+  }
+  return held
+}
+
+/**
+ * Stock moves are decided from the order's stored state, never the screen:
+ * - take off: moving into a paid status while nothing is held. Offline sales recorded
+ *   without deducting stay that way unless the app itself put their stock back earlier.
+ * - put back: cancelling with `restock` while stock is held.
+ */
+function planStockMove(
+  stored: Order,
+  newStatus: OrderStatus,
+  restock: boolean
+): 'deduct' | 'restore' | null {
+  const deducted = isStockDeducted(stored)
+  if (newStatus === 'cancelled') return restock && deducted ? 'restore' : null
+  if (!PAID_STATUSES.includes(newStatus) || deducted) return null
+  if (stored.channel === 'offline' && stored.stockRestored !== true) return null
+  return 'deduct'
+}
+
+/**
+ * Thrown when confirming payment would take a product below zero stock (the same bag was
+ * sold twice before either payment was verified). Carries an admin-readable message.
+ */
+export class StockShortageError extends Error {
+  constructor(public readonly shortages: string[]) {
+    super(
+      `Not enough stock to confirm this order: ${shortages.join('; ')}. Restock the piece in Inventory, or cancel and refund the order.`
+    )
+    this.name = 'StockShortageError'
+  }
+}
+
+function findShortages(
+  held: Map<string, { name: string; quantity: number }>,
+  stockFor: (productId: string) => number | null
+): string[] {
+  const shortages: string[] = []
+  for (const [productId, { name, quantity }] of held) {
+    const stock = stockFor(productId)
+    if (stock === null) continue // product deleted since the order was placed
+    if (stock < quantity) {
+      shortages.push(`${name} has ${stock} left but the order needs ${quantity}`)
+    }
+  }
+  return shortages
+}
+
+export interface UpdateOrderStatusOptions {
+  /** When cancelling, put the order's items back in stock (only if they are currently held). */
+  restock?: boolean
+}
+
+export interface UpdateOrderStatusResult {
+  /** Units taken off (negative) or put back (positive); 0 when stock didn't move. */
+  stockChange: number
 }
 
 export async function updateOrderStatus(
   order: Order,
   newStatus: OrderStatus,
-  dispatchNote = ''
-): Promise<void> {
+  dispatchNote = '',
+  options: UpdateOrderStatusOptions = {}
+): Promise<UpdateOrderStatusResult> {
   const now = new Date().toISOString()
   const cleanNote = dispatchNote.trim()
+  const restock = Boolean(options.restock)
 
   if (isFirebaseConfigured && db) {
     const firestore = db
-    // Decide on stock deduction from the order's CURRENT stored status, read inside
-    // a transaction, never from the (possibly stale) UI copy. This makes repeated
-    // clicks idempotent and covers jumps from pending straight to any paid status.
-    await runTransaction(firestore, async (tx) => {
+    // Everything is decided inside the transaction from the stored order, so repeated clicks
+    // and stale screens can never move stock twice.
+    return runTransaction(firestore, async (tx) => {
       const orderRef = doc(firestore, 'orders', order.id)
       const snap = await tx.get(orderRef)
       if (!snap.exists()) throw new Error('Order no longer exists')
-      const currentStatus = (snap.data() as Order).status
-      const deduct = shouldDeductStock(currentStatus, newStatus)
+      const stored = snap.data() as Order
+      const move = planStockMove(stored, newStatus, restock)
+      const held = move ? stockHeldByOrder(stored.items) : new Map<string, { name: string; quantity: number }>()
 
-      const productRefs = deduct
-        ? order.items.map((item) => doc(firestore, 'products', item.productId))
-        : []
+      const ids = Array.from(held.keys())
+      const productRefs = ids.map((id) => doc(firestore, 'products', id))
       const productSnaps = await Promise.all(productRefs.map((r) => tx.get(r)))
+      const stockById = new Map(
+        productSnaps.map((ps, i) => [ids[i], ps.exists() ? Math.floor(Number(ps.data().stock) || 0) : null])
+      )
 
-      tx.update(orderRef, { status: newStatus, dispatchNote: cleanNote, updatedAt: now })
-      tx.update(doc(firestore, 'orderTracking', order.orderCode), {
+      if (move === 'deduct') {
+        // Rules reject negative stock, which would surface as an opaque permission error.
+        const shortages = findShortages(held, (id) => stockById.get(id) ?? null)
+        if (shortages.length > 0) throw new StockShortageError(shortages)
+      }
+
+      const orderPatch: Record<string, unknown> = { status: newStatus, dispatchNote: cleanNote, updatedAt: now }
+      if (move === 'deduct') orderPatch.stockDeducted = true
+      if (move === 'restore') {
+        orderPatch.stockDeducted = false
+        orderPatch.stockRestored = true
+      }
+      tx.update(orderRef, orderPatch)
+      tx.update(doc(firestore, 'orderTracking', stored.orderCode), {
         status: newStatus,
         dispatchNote: cleanNote,
         updatedAt: now,
       })
+
+      let stockChange = 0
+      const sign = move === 'restore' ? 1 : -1
       productSnaps.forEach((ps, i) => {
         if (!ps.exists()) return // product deleted since the order was placed
-        tx.update(productRefs[i], {
-          stock: increment(-order.items[i].quantity),
-          updatedAt: now,
-        })
+        const qty = held.get(ids[i])!.quantity
+        stockChange += sign * qty
+        tx.update(productRefs[i], { stock: increment(sign * qty), updatedAt: now })
       })
+      return { stockChange }
     })
-    return
   }
 
   const orders = readDemo<Order[]>(DEMO_KEYS.orders, [])
-  const stored = orders.find((o) => o.id === order.id)
-  const shouldDecrementStock = shouldDeductStock(stored?.status ?? order.status, newStatus)
+  const stored = orders.find((o) => o.id === order.id) ?? order
+  const move = planStockMove(stored, newStatus, restock)
+  const held = move ? stockHeldByOrder(stored.items) : new Map<string, { name: string; quantity: number }>()
+  const products = readDemo<Product[]>(DEMO_KEYS.products, DEFAULT_PRODUCTS)
+  if (move === 'deduct') {
+    const shortages = findShortages(held, (id) => {
+      const p = products.find((x) => x.id === id)
+      return p ? p.stock : null
+    })
+    if (shortages.length > 0) throw new StockShortageError(shortages)
+  }
   writeDemo(
     DEMO_KEYS.orders,
-    orders.map((o) =>
-      o.id === order.id ? { ...o, status: newStatus, dispatchNote: cleanNote, updatedAt: now } : o
-    )
-  )
-  if (shouldDecrementStock) {
-    const products = readDemo<Product[]>(DEMO_KEYS.products, DEFAULT_PRODUCTS)
-    const updatedProducts = products.map((p) => {
-      const match = order.items.find((i) => i.productId === p.id)
-      return match ? { ...p, stock: Math.max(0, p.stock - match.quantity), updatedAt: now } : p
+    orders.map((o) => {
+      if (o.id !== order.id) return o
+      const next: Order = { ...o, status: newStatus, dispatchNote: cleanNote, updatedAt: now }
+      if (move === 'deduct') next.stockDeducted = true
+      if (move === 'restore') {
+        next.stockDeducted = false
+        next.stockRestored = true
+      }
+      return next
     })
-    writeDemo(DEMO_KEYS.products, updatedProducts)
+  )
+  let stockChange = 0
+  if (move) {
+    const sign = move === 'restore' ? 1 : -1
+    writeDemo(
+      DEMO_KEYS.products,
+      products.map((p) => {
+        const h = held.get(p.id)
+        if (!h) return p
+        stockChange += sign * h.quantity
+        return { ...p, stock: Math.max(0, p.stock + sign * h.quantity), updatedAt: now }
+      })
+    )
   }
+  return { stockChange }
 }
 
 export async function lookupOrderTracking(orderCode: string): Promise<OrderTrackingInfo | null> {
@@ -551,17 +722,19 @@ export async function updateBespokeStatus(id: string, status: BespokeStatus): Pr
 }
 
 /* ---------- Store Settings ---------- */
-export async function fetchStoreSettings(): Promise<StoreSettings> {
+/**
+ * Returns the saved store settings, or null when the owner has never saved them.
+ * Network and permission errors are thrown, never papered over with defaults:
+ * a fallback here would put a placeholder bank account in front of paying customers.
+ */
+export async function fetchStoreSettings(): Promise<StoreSettings | null> {
   if (isFirebaseConfigured && db) {
-    try {
-      const snap = await getDoc(doc(db, 'settings', 'store'))
-      if (snap.exists()) return snap.data() as StoreSettings
-    } catch {
-      return DEFAULT_STORE_SETTINGS
-    }
-    return DEFAULT_STORE_SETTINGS
+    const snap = await getDoc(doc(db, 'settings', 'store'))
+    if (!snap.exists()) return null
+    return { ...DEFAULT_STORE_SETTINGS, ...(snap.data() as Partial<StoreSettings>) }
   }
-  return readDemo<StoreSettings>(DEMO_KEYS.settings, DEFAULT_STORE_SETTINGS)
+  const saved = readDemo<StoreSettings | null>(DEMO_KEYS.settings, null)
+  return saved ? { ...DEFAULT_STORE_SETTINGS, ...saved } : null
 }
 
 export async function saveStoreSettings(settings: StoreSettings): Promise<void> {

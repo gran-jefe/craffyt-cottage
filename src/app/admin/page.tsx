@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   GoogleAuthProvider,
@@ -10,19 +11,7 @@ import {
   signOut,
   type User,
 } from 'firebase/auth'
-import {
-  Package,
-  Receipt,
-  Sparkles,
-  Settings,
-  LogOut,
-  Lock,
-  Loader2,
-  AlertTriangle,
-  ExternalLink,
-  Eye,
-  EyeOff,
-} from 'lucide-react'
+import { Lock, Loader2, AlertTriangle, Eye, EyeOff } from 'lucide-react'
 import { auth, isFirebaseConfigured } from '@/lib/firebase'
 import {
   checkAdminAccess,
@@ -31,16 +20,43 @@ import {
   fetchProducts,
   fetchStoreSettings,
 } from '@/lib/storeService'
-import { DEFAULT_STORE_SETTINGS, formatNaira } from '@/lib/defaults'
+import { DEFAULT_STORE_SETTINGS, hasPaymentDetails } from '@/lib/defaults'
 import { AdminInventory } from '@/components/admin/AdminInventory'
 import { AdminOrders } from '@/components/admin/AdminOrders'
 import { AdminBespoke } from '@/components/admin/AdminBespoke'
 import { AdminSettings } from '@/components/admin/AdminSettings'
-import type { BespokeRequest, Order, Product, StoreSettings } from '@/types/store'
+import { AdminOverview, type OverviewNavigate } from '@/components/admin/AdminOverview'
+import {
+  AdminNavigation,
+  parseSection,
+  sectionHref,
+  SECTION_LABELS,
+  type AdminSection,
+  type NavBadge,
+} from '@/components/admin/AdminSidebar'
+import { computeAttention } from '@/lib/analytics'
+import type { BespokeRequest, Order, OrderStatus, Product, StoreSettings } from '@/types/store'
 
-type Tab = 'inventory' | 'orders' | 'bespoke' | 'settings'
-
+// Reading the URL's ?section= needs a Suspense boundary for static rendering.
 export default function AdminPortalPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#FAF8F4] flex items-center justify-center">
+          <Loader2 className="w-7 h-7 animate-spin text-[#263E0F]" />
+        </div>
+      }
+    >
+      <AdminPortal />
+    </Suspense>
+  )
+}
+
+function AdminPortal() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  // The section lives in the URL so refresh, back/forward and "open in new tab" all work.
+  const section = parseSection(searchParams.get('section'))
   const [authLoading, setAuthLoading] = useState(isFirebaseConfigured)
   const [user, setUser] = useState<User | null>(null)
   const [isAdmin, setIsAdmin] = useState(!isFirebaseConfigured)
@@ -54,13 +70,36 @@ export default function AdminPortalPage() {
   const [showPassword, setShowPassword] = useState(false)
 
   // Dashboard data
-  const [activeTab, setActiveTab] = useState<Tab>('inventory')
+  // Set when the overview sends the admin to a pre-filtered order list (e.g. pending receipts).
+  const [ordersStatusPreset, setOrdersStatusPreset] = useState<OrderStatus | null>(null)
+
+  /** Section chosen from the sidebar: always open it unfiltered. */
+  function onSidebarNavigate() {
+    setOrdersStatusPreset(null)
+  }
+
+  /** From the overview: open a section (optionally pre-filtered) and move focus into it. */
+  const navigateFromOverview: OverviewNavigate = (target, options) => {
+    setOrdersStatusPreset(options?.orderStatus ?? null)
+    router.push(sectionHref(target), { scroll: false })
+    requestAnimationFrame(() => document.getElementById('admin-main')?.focus({ preventScroll: true }))
+  }
+
+  // Each section starts at the top (skip the first render so a refresh keeps its place).
+  const lastSection = useRef(section)
+  useEffect(() => {
+    if (lastSection.current === section) return
+    lastSection.current = section
+    window.scrollTo({ top: 0 })
+  }, [section])
   const [loadingData, setLoadingData] = useState(false)
+  const [hasLoaded, setHasLoaded] = useState(false)
   const [loadError, setLoadError] = useState(false)
   const [products, setProducts] = useState<Product[]>([])
   const [orders, setOrders] = useState<Order[]>([])
   const [bespoke, setBespoke] = useState<BespokeRequest[]>([])
-  const [settings, setSettings] = useState<StoreSettings>(DEFAULT_STORE_SETTINGS)
+  // null = the owner has never saved settings (checkout is paused until they do).
+  const [settings, setSettings] = useState<StoreSettings | null>(null)
 
   const loadAll = useCallback(async () => {
     setLoadingData(true)
@@ -81,6 +120,7 @@ export default function AdminPortalPage() {
       setLoadError(true)
     } finally {
       setLoadingData(false)
+      setHasLoaded(true)
     }
   }, [])
 
@@ -158,7 +198,7 @@ export default function AdminPortalPage() {
             </span>
             <div>
               <h1 className="font-serif-display text-2xl font-bold text-[#17210E]">
-                Crafty Cottage studio
+                Crafty Cottage admin
               </h1>
               <p className="text-xs text-[#4A5240]">Sign in to manage bags, stock &amp; orders</p>
             </div>
@@ -168,7 +208,7 @@ export default function AdminPortalPage() {
             <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs text-[#B42318] space-y-2">
               <p className="font-bold">Access restricted</p>
               <p>
-                Signed in as <strong>{user.email}</strong>. This account doesn&apos;t have studio
+                Signed in as <strong>{user.email}</strong>. This account doesn&apos;t have admin
                 access. Ask the shop owner to add it, or sign in with a different account.
               </p>
               <button
@@ -295,164 +335,138 @@ export default function AdminPortalPage() {
     )
   }
 
-  // Dashboard Metrics
-  const confirmedRevenue = orders
-    .filter((o) => o.status !== 'pending_verification' && o.status !== 'cancelled')
-    .reduce((s, o) => s + o.total, 0)
-  const pendingOrdersCount = orders.filter((o) => o.status === 'pending_verification').length
-  const lowStockCount = products.filter((p) => p.stock <= 2).length
-  const newBespokeCount = bespoke.filter((b) => b.status === 'new').length
+  // Sidebar badges: things to act on, mirroring the overview's "Needs attention".
+  const attention = computeAttention(orders, products, bespoke, Date.now())
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
+  const badges: Partial<Record<AdminSection, NavBadge>> = hasLoaded
+    ? {
+        orders: { count: attention.pendingCount, label: plural(attention.pendingCount, 'receipt to verify', 'receipts to verify') },
+        inventory: { count: attention.lowStock.length, label: plural(attention.lowStock.length, 'piece low or sold out', 'pieces low or sold out') },
+        bespoke: { count: attention.newBespokeCount, label: plural(attention.newBespokeCount, 'new request', 'new requests') },
+        ...(!loadError && !hasPaymentDetails(settings)
+          ? { settings: { warning: true, label: 'checkout is paused until bank details are saved' } }
+          : {}),
+      }
+    : {}
 
   return (
-    <div className="min-h-screen bg-[#FAF8F4] flex flex-col">
-      {/* Admin Top Bar */}
-      <header className="bg-[#111B07] text-[#FAF8F4] border-b border-[#3A5222]">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <span className="w-9 h-9 rounded-lg bg-[#263E0F] text-[#E6C975] font-serif-display font-bold text-xl grid place-items-center">
-              C
-            </span>
-            <div>
-              <h1 className="font-serif-display text-base sm:text-lg font-bold leading-none text-white">
-                Crafty Cottage studio
-              </h1>
-              <span className="text-xs text-[#CFC6B2]">Inventory and orders</span>
+    <div className="min-h-screen bg-[#FAF8F4]">
+      <AdminNavigation
+        active={section}
+        badges={badges}
+        refreshing={loadingData && hasLoaded}
+        account={isFirebaseConfigured ? user?.email ?? null : 'Demo mode'}
+        onNavigate={onSidebarNavigate}
+        onSignOut={isFirebaseConfigured ? handleLogout : undefined}
+      />
+
+      <div className="lg:pl-64">
+        {/* Local Demo Banner if Firebase .env not set */}
+        {!isFirebaseConfigured && (
+          <div className="bg-amber-50 border-b border-amber-200 px-4 sm:px-6 lg:px-8 py-2.5 text-xs text-amber-950">
+            <div className="max-w-6xl mx-auto flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-amber-700" />
+              <span>
+                <strong>Local demo mode:</strong> Changes save in browser storage right now. Add your Firebase keys to{' '}
+                <code>.env.local</code> to connect live Firestore &amp; Cloud Storage.
+              </span>
             </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Link
-              href="/"
-              className="min-h-[44px] px-3 rounded-lg border border-[#3A5222] hover:border-[#E6C975] text-xs font-semibold text-[#FAF8F4] flex items-center gap-1.5"
-            >
-              <span>View shop</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </Link>
-            {isFirebaseConfigured && (
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="min-h-[44px] px-3 rounded-lg bg-[#263E0F] hover:bg-[#355416] text-xs font-semibold text-[#FAF8F4] flex items-center gap-1.5"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Sign out</span>
-              </button>
-            )}
-          </div>
-        </div>
-      </header>
-
-      {/* Local Demo Banner if Firebase .env not set */}
-      {!isFirebaseConfigured && (
-        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 text-xs text-amber-950">
-          <div className="max-w-6xl mx-auto flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-700" />
-            <span>
-              <strong>Local demo mode:</strong> Changes save in browser storage right now. Add your Firebase keys to{' '}
-              <code>.env.local</code> to connect live Firestore &amp; Cloud Storage.
-            </span>
-          </div>
-        </div>
-      )}
-
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8 space-y-8">
-        {/* KPI Strip */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white rounded-2xl border border-[#E2DACA] p-4">
-            <span className="text-xs text-[#4A5240] block">Verified revenue</span>
-            <strong className="font-serif-display text-2xl font-bold text-[#263E0F] tabular-nums mt-1 block">
-              {formatNaira(confirmedRevenue)}
-            </strong>
-          </div>
-          <div className="bg-white rounded-2xl border border-[#E2DACA] p-4">
-            <span className="text-xs text-[#4A5240] block">Receipts to verify</span>
-            <strong className="font-serif-display text-2xl font-bold text-[#17210E] tabular-nums mt-1 block">
-              {pendingOrdersCount}
-            </strong>
-          </div>
-          <div className="bg-white rounded-2xl border border-[#E2DACA] p-4">
-            <span className="text-xs text-[#4A5240] block">Low or out of stock</span>
-            <strong className="font-serif-display text-2xl font-bold text-[#B42318] tabular-nums mt-1 block">
-              {lowStockCount}
-            </strong>
-          </div>
-          <div className="bg-white rounded-2xl border border-[#E2DACA] p-4">
-            <span className="text-xs text-[#4A5240] block">New bespoke requests</span>
-            <strong className="font-serif-display text-2xl font-bold text-[#17210E] tabular-nums mt-1 block">
-              {newBespokeCount}
-            </strong>
-          </div>
-        </div>
-
-        {/* Navigation Tabs */}
-        <div className="flex flex-wrap gap-2 border-b border-[#E2DACA] pb-3" role="tablist">
-          {(
-            [
-              { id: 'inventory', label: `Inventory (${products.length})`, icon: Package },
-              { id: 'orders', label: `Orders and sales (${orders.length})`, icon: Receipt },
-              { id: 'bespoke', label: `Bespoke (${bespoke.length})`, icon: Sparkles },
-              { id: 'settings', label: 'Bank and delivery', icon: Settings },
-            ] as const
-          ).map((tab) => {
-            const Icon = tab.icon
-            const active = activeTab === tab.id
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setActiveTab(tab.id)}
-                className={`min-h-[44px] px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-colors border ${
-                  active
-                    ? 'bg-[#263E0F] text-white border-[#263E0F]'
-                    : 'bg-white text-[#4A5240] border-[#E2DACA] hover:text-[#17210E]'
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                <span>{tab.label}</span>
-              </button>
-            )
-          })}
-        </div>
-
-        {loadError && !loadingData && (
-          <div
-            role="alert"
-            className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl bg-red-50 border border-red-200"
-          >
-            <div className="flex items-start gap-2.5 text-sm text-[#7A1B14]">
-              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
-              <p>
-                <strong className="block">Could not load your shop data</strong>
-                Products, orders and requests below may be out of date. Check your connection and retry.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => loadAll()}
-              className="min-h-[44px] px-4 rounded-xl bg-[#B42318] hover:bg-[#912018] text-white text-xs font-bold"
-            >
-              Retry loading
-            </button>
           </div>
         )}
 
-        {/* Tab Body */}
-        {loadingData ? (
-          <div className="py-16 flex justify-center">
-            <Loader2 className="w-7 h-7 animate-spin text-[#263E0F]" />
-          </div>
-        ) : activeTab === 'inventory' ? (
-          <AdminInventory products={products} onRefresh={loadAll} />
-        ) : activeTab === 'orders' ? (
-          <AdminOrders orders={orders} products={products} onRefresh={loadAll} />
-        ) : activeTab === 'bespoke' ? (
-          <AdminBespoke requests={bespoke} onRefresh={loadAll} />
-        ) : (
-          <AdminSettings initialSettings={settings} onRefresh={loadAll} />
-        )}
-      </main>
+        <main
+          id="admin-main"
+          tabIndex={-1}
+          aria-busy={loadingData}
+          className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#263E0F]"
+        >
+          <h1 className="sr-only">{SECTION_LABELS[section]}, Crafty Cottage admin</h1>
+
+          {!loadError && hasLoaded && !hasPaymentDetails(settings) && (
+            <div
+              role="alert"
+              className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl bg-amber-50 border border-amber-300"
+            >
+              <div className="flex items-start gap-2.5 text-sm text-amber-950">
+                <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-amber-700" />
+                <p>
+                  <strong className="block">Checkout is paused</strong>
+                  Customers can&apos;t pay until you save your bank name, account name and 10-digit account number.
+                </p>
+              </div>
+              {section !== 'settings' && (
+                <Link
+                  href={sectionHref('settings')}
+                  scroll={false}
+                  onClick={onSidebarNavigate}
+                  className="min-h-[44px] px-4 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-xs font-bold inline-flex items-center"
+                >
+                  Add bank details
+                </Link>
+              )}
+            </div>
+          )}
+
+          {loadError && !loadingData && (
+            <div
+              role="alert"
+              className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl bg-red-50 border border-red-200"
+            >
+              <div className="flex items-start gap-2.5 text-sm text-[#7A1B14]">
+                <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+                <p>
+                  <strong className="block">Could not load your shop data</strong>
+                  Products, orders and requests below may be out of date. Check your connection and retry.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => loadAll()}
+                className="min-h-[44px] px-4 rounded-xl bg-[#B42318] hover:bg-[#912018] text-white text-xs font-bold"
+              >
+                Retry loading
+              </button>
+            </div>
+          )}
+
+          {/* The spinner only replaces content on first load. Later refreshes keep the current
+              view mounted so filters, unsaved notes and scroll position survive. */}
+          {!hasLoaded ? (
+            <div className="py-16 flex justify-center">
+              <Loader2 className="w-7 h-7 animate-spin text-[#263E0F]" />
+            </div>
+          ) : section === 'overview' ? (
+            <AdminOverview
+              orders={orders}
+              products={products}
+              bespoke={bespoke}
+              refreshing={loadingData}
+              onNavigate={navigateFromOverview}
+            />
+          ) : section === 'inventory' ? (
+            <AdminInventory products={products} onRefresh={loadAll} />
+          ) : section === 'orders' ? (
+            <AdminOrders
+              orders={orders}
+              products={products}
+              deliveryZones={settings?.deliveryZones ?? []}
+              initialStatusFilter={ordersStatusPreset ?? undefined}
+              onRefresh={loadAll}
+            />
+          ) : section === 'bespoke' ? (
+            <AdminBespoke requests={bespoke} onRefresh={loadAll} />
+          ) : (
+            <AdminSettings
+              // Remount when the saved settings change (e.g. a retry succeeds) so the form never
+              // holds stale values that could be saved over the real ones.
+              key={JSON.stringify(settings)}
+              initialSettings={settings ?? DEFAULT_STORE_SETTINGS}
+              locked={loadError}
+              onRefresh={loadAll}
+            />
+          )}
+        </main>
+      </div>
     </div>
   )
 }

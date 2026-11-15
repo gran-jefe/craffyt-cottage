@@ -3,7 +3,12 @@
 import React, { useEffect, useState } from 'react'
 import { useDialogFocus } from '@/lib/useDialogFocus'
 import { Loader2, Plus, Trash2, Upload, X } from 'lucide-react'
-import { createOfflineOrder, uploadMediaFile } from '@/lib/storeService'
+import {
+  ReceiptFileError,
+  checkReceiptFile,
+  createOfflineOrder,
+  uploadMediaFile,
+} from '@/lib/storeService'
 import { formatNaira } from '@/lib/defaults'
 import { useCart } from '@/context/CartContext'
 import type { OrderItem, OrderStatus, PaymentMethod, Product } from '@/types/store'
@@ -24,7 +29,7 @@ interface LineItemDraft {
 }
 
 const OFFLINE_SOURCES = [
-  'In-Studio / Walk-in',
+  'In person / Walk-in',
   'WhatsApp / DM',
   'Pop-up / Market',
   'Phone / Referral',
@@ -143,8 +148,10 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
   async function handleReceiptUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 10 * 1024 * 1024) {
-      setError('Receipt file must be under 10 MB.')
+    e.target.value = ''
+    const problem = checkReceiptFile(file)
+    if (problem) {
+      setError(problem)
       return
     }
     setUploadingReceipt(true)
@@ -153,8 +160,12 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
       const url = await uploadMediaFile(file, 'receipts')
       setReceiptUrl(url)
       showToast('Receipt slip attached.')
-    } catch {
-      setError('Could not upload receipt slip. Check Storage permissions.')
+    } catch (err) {
+      setError(
+        err instanceof ReceiptFileError
+          ? err.message
+          : 'Could not upload the receipt slip. Check your connection and try again.'
+      )
     } finally {
       setUploadingReceipt(false)
     }
@@ -267,7 +278,7 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
               Record an offline sale
             </h3>
             <p className="text-xs text-[#4A5240]">
-              Log a studio walk-in, pop-up market, or DM purchase and optionally deduct inventory.
+              Log an in-person, pop-up market, or DM purchase and optionally deduct inventory.
             </p>
           </div>
           <button
@@ -341,7 +352,7 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
 
                     <div className="sm:col-span-3">
                       <label htmlFor={`offline-price-${line.key}`} className="block text-xs font-bold mb-1">
-                        Unit Price (₦)
+                        Unit price (₦)
                       </label>
                       <input
                         id={`offline-price-${line.key}`}
@@ -395,7 +406,7 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
                     onChange={(e) => setDeductStock(e.target.checked)}
                     className="w-4 h-4 accent-[#263E0F]"
                   />
-                  <span>Deduct sold quantities from live inventory stock</span>
+                  <span>Deduct sold quantities from inventory stock</span>
                 </label>
                 {stockExceedsWarning && (
                   <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
@@ -505,7 +516,7 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
 
             <div>
               <label htmlFor="offline-delivery-fee" className="block text-xs font-bold mb-1">
-                Delivery Fee (₦)
+                Delivery fee (₦)
               </label>
               <input
                 id="offline-delivery-fee"
@@ -526,7 +537,7 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
                 type="text"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                placeholder="e.g. Picked up at UI studio"
+                placeholder="e.g. Picked up on UI campus"
                 className="w-full min-h-[44px] px-3 rounded-xl border border-[#E2DACA] bg-[#FAF8F4] text-sm"
               />
             </div>
