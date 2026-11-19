@@ -855,6 +855,7 @@ export function AdminOrders({ orders, products, deliveryZones, settings, onRefre
         products={products}
         onClose={() => setOfflineModalOpen(false)}
         onSaved={onRefresh}
+        onCreated={(order) => setDocOrder(order)}
       />
     </div>
   )
