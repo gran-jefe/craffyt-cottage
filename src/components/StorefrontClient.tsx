@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   Palette,
@@ -8,6 +9,7 @@ import {
   Check,
   Search,
   SlidersHorizontal,
+  ChevronRight,
   X,
   Phone,
   Camera,
@@ -30,6 +32,8 @@ import { DEFAULT_COUNTRY, parsePhoneForCountry } from '@/lib/phone'
 import { PhoneField } from '@/components/PhoneField'
 import { hasVariants, priceRange, uniqueOptions } from '@/lib/variants'
 import { ProductOptionsDialog } from '@/components/ProductOptionsDialog'
+import { categoryOf, collectionName, collectionOf, sizeLabelFor } from '@/lib/catalog'
+import { useCatalog } from '@/lib/useCatalog'
 import type { Product, StoreSettings } from '@/types/store'
 
 /** "3 colours · 2 sizes" for the product card. */
@@ -81,18 +85,33 @@ function sortProducts(list: Product[], sort: SortKey): Product[] {
   return sorted
 }
 
-/** Filters live in the URL (?q=&collection=&sort=&instock=1) so a filtered view can be shared. */
-function readUrlFilters() {
-  if (typeof window === 'undefined') return null
-  const q = new URLSearchParams(window.location.search)
+/**
+ * Filters live in the URL (?category=waist-beads&collection=owambe&q=&sort=&instock=1), so a
+ * header link, a shared link or the back button lands on exactly that view.
+ */
+function readFilters(q: URLSearchParams) {
   const sort = q.get('sort') as SortKey | null
   return {
     search: q.get('q') ?? '',
-    collection: q.get('collection') ?? 'All',
+    category: q.get('category') || 'all',
+    collection: q.get('collection') || 'all',
     sort: sort && sort in SORT_LABELS ? sort : ('featured' as SortKey),
     inStockOnly: q.get('instock') === '1',
   }
 }
+
+function filtersToQuery(f: ReturnType<typeof readFilters>): string {
+  const q = new URLSearchParams()
+  if (f.category !== 'all') q.set('category', f.category)
+  if (f.collection !== 'all') q.set('collection', f.collection)
+  if (f.search.trim()) q.set('q', f.search.trim())
+  if (f.sort !== 'featured') q.set('sort', f.sort)
+  if (f.inStockOnly) q.set('instock', '1')
+  return q.toString()
+}
+
+/** Products per category on the grouped shop landing. */
+const GROUP_PREVIEW = 4
 
 function validateName(v: string): string | undefined {
   return v.trim().length < 2 ? 'Enter your name so we can follow up.' : undefined
@@ -112,43 +131,57 @@ export function StorefrontClient() {
   const [catalogueError, setCatalogueError] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
 
-  // Catalog filters
-  const [selectedCollection, setSelectedCollection] = useState('All')
+  // Catalog filters ('all' = no filter). Category and collection hold catalogue ids.
+  const { catalog } = useCatalog()
+  const searchParams = useSearchParams()
+  const [selectedCategory, setSelectedCategory] = useState('all')
+  const [selectedCollection, setSelectedCollection] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [sort, setSort] = useState<SortKey>('featured')
   const [inStockOnly, setInStockOnly] = useState(false)
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const [filtersReady, setFiltersReady] = useState(false)
   const [optionsFor, setOptionsFor] = useState<Product | null>(null)
+  /** The query this component last wrote, so its own URL updates aren't read back as navigation. */
+  const lastQuery = useRef<string | null>(null)
 
-  // Restore filters from the link once, then keep the link in step with them.
+  // Apply the URL on load and whenever something else changes it (header or hero links, back button).
+  const urlQuery = searchParams.toString()
   useEffect(() => {
-    const saved = readUrlFilters()
-    if (saved) {
-      setSearchQuery(saved.search)
-      setSelectedCollection(saved.collection)
-      setSort(saved.sort)
-      setInStockOnly(saved.inStockOnly)
+    if (urlQuery === lastQuery.current) return
+    const f = readFilters(new URLSearchParams(urlQuery))
+    setSelectedCategory(f.category)
+    setSelectedCollection(f.collection)
+    setSearchQuery(f.search)
+    setSort(f.sort)
+    setInStockOnly(f.inStockOnly)
+    lastQuery.current = urlQuery
+    if (filtersReady && window.location.hash === '#shop') {
+      document.getElementById('shop')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
     setFiltersReady(true)
-  }, [])
+  }, [urlQuery, filtersReady])
 
+  // Keep the link in step with the filters.
   useEffect(() => {
     if (!filtersReady) return
-    const q = new URLSearchParams()
-    if (searchQuery.trim()) q.set('q', searchQuery.trim())
-    if (selectedCollection !== 'All') q.set('collection', selectedCollection)
-    if (sort !== 'featured') q.set('sort', sort)
-    if (inStockOnly) q.set('instock', '1')
-    const query = q.toString()
+    const query = filtersToQuery({
+      category: selectedCategory,
+      collection: selectedCollection,
+      search: searchQuery,
+      sort,
+      inStockOnly,
+    })
+    if (query === lastQuery.current) return
+    lastQuery.current = query
     const url = `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`
     window.history.replaceState(window.history.state, '', url)
-  }, [filtersReady, searchQuery, selectedCollection, sort, inStockOnly])
+  }, [filtersReady, selectedCategory, selectedCollection, searchQuery, sort, inStockOnly])
 
   // A new filter starts from the top of the results.
   useEffect(() => {
     setVisibleCount(PAGE_SIZE)
-  }, [searchQuery, selectedCollection, sort, inStockOnly])
+  }, [searchQuery, selectedCategory, selectedCollection, sort, inStockOnly])
 
   // Bespoke studio form
   const [shapeId, setShapeId] = useState(BESPOKE_SHAPES[0].id)
@@ -189,37 +222,76 @@ export function StorefrontClient() {
     }
   }, [reloadKey])
 
-  /** Collections with how many pieces each holds, largest first. */
-  const collections = useMemo(() => {
+  const categoryName = (id: string) => catalog.categories.find((c) => c.id === id)?.name
+  const activeCategory = selectedCategory === 'all' ? undefined : catalog.categories.find((c) => c.id === selectedCategory)
+  const activeCollection =
+    selectedCollection === 'all' ? undefined : catalog.collections.find((c) => c.id === selectedCollection)
+
+  /** Category tabs in catalogue order, with how many pieces each holds (empty ones hidden). */
+  const categoryTabs = useMemo(() => {
     const counts = new Map<string, number>()
-    for (const p of products) if (p.collection) counts.set(p.collection, (counts.get(p.collection) ?? 0) + 1)
-    return [
-      { name: 'All', count: products.length },
-      ...Array.from(counts, ([name, count]) => ({ name, count })).sort(
-        (a, b) => b.count - a.count || a.name.localeCompare(b.name)
-      ),
-    ]
-  }, [products])
+    for (const p of products) {
+      const c = categoryOf(p, catalog)
+      if (c) counts.set(c.id, (counts.get(c.id) ?? 0) + 1)
+    }
+    return catalog.categories
+      .filter((c) => (counts.get(c.id) ?? 0) > 0)
+      .map((c) => ({ id: c.id, name: c.name, count: counts.get(c.id) ?? 0 }))
+  }, [products, catalog])
+
+  /** Collections present in the chosen category, in catalogue order, with counts. */
+  const collectionChips = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const p of products) {
+      if (selectedCategory !== 'all' && categoryOf(p, catalog)?.id !== selectedCategory) continue
+      const k = collectionOf(p, catalog)
+      if (k) counts.set(k.id, (counts.get(k.id) ?? 0) + 1)
+    }
+    return catalog.collections
+      .filter((c) => (counts.get(c.id) ?? 0) > 0)
+      .map((c) => ({ id: c.id, name: c.name, count: counts.get(c.id) ?? 0 }))
+  }, [products, catalog, selectedCategory])
 
   const filteredProducts = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     const matches = products.filter((p) => {
-      const matchesCol = selectedCollection === 'All' || p.collection === selectedCollection
+      const matchesCat = selectedCategory === 'all' || categoryOf(p, catalog)?.id === selectedCategory
+      const matchesCol = selectedCollection === 'all' || collectionOf(p, catalog)?.id === selectedCollection
       const matchesStock = !inStockOnly || p.stock > 0
       const matchesQ =
         !q ||
         p.name.toLowerCase().includes(q) ||
         p.description.toLowerCase().includes(q) ||
         p.tag.toLowerCase().includes(q) ||
-        p.collection.toLowerCase().includes(q) ||
+        collectionName(p, catalog).toLowerCase().includes(q) ||
+        (categoryOf(p, catalog)?.name.toLowerCase().includes(q) ?? false) ||
         (p.variants ?? []).some((v) => `${v.color} ${v.size}`.toLowerCase().includes(q))
-      return matchesCol && matchesStock && matchesQ
+      return matchesCat && matchesCol && matchesStock && matchesQ
     })
     return sortProducts(matches, sort)
-  }, [products, selectedCollection, searchQuery, inStockOnly, sort])
+  }, [products, catalog, selectedCategory, selectedCollection, searchQuery, inStockOnly, sort])
 
   const shownProducts = filteredProducts.slice(0, visibleCount)
-  const filtersActive = Boolean(searchQuery.trim()) || selectedCollection !== 'All' || inStockOnly
+  const filtersActive =
+    Boolean(searchQuery.trim()) || selectedCategory !== 'all' || selectedCollection !== 'all' || inStockOnly
+
+  /**
+   * The unfiltered shop opens grouped by category (a few pieces each, "View all" to go in),
+   * so a visitor after waist beads never has to scroll past every bag.
+   */
+  const groups = useMemo(() => {
+    if (filtersActive || sort !== 'featured' || categoryTabs.length < 2) return null
+    const sorted = sortProducts(products, 'featured')
+    const out = categoryTabs.map((t) => ({
+      id: t.id,
+      name: t.name,
+      count: t.count,
+      items: sorted.filter((p) => categoryOf(p, catalog)?.id === t.id).slice(0, GROUP_PREVIEW),
+    }))
+    const loose = sorted.filter((p) => !categoryOf(p, catalog))
+    if (loose.length > 0) out.push({ id: '', name: 'More pieces', count: loose.length, items: loose.slice(0, GROUP_PREVIEW) })
+    return out
+  }, [filtersActive, sort, categoryTabs, products, catalog])
 
   /** Featured pieces for the hero strip: featured first, then newest, in stock only. */
   const heroPieces = useMemo(
@@ -229,16 +301,30 @@ export function StorefrontClient() {
 
   function clearFilters() {
     setSearchQuery('')
-    setSelectedCollection('All')
+    setSelectedCategory('all')
+    setSelectedCollection('all')
     setInStockOnly(false)
+  }
+
+  function scrollToShop() {
+    document.getElementById('shop')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  /** Go straight to one category (from the hero, a group heading or a breadcrumb). */
+  function openCategory(id: string) {
+    setSelectedCategory(id)
+    setSelectedCollection('all')
+    setSearchQuery('')
+    scrollToShop()
   }
 
   /** From the hero: show this one piece in the shop grid. */
   function viewInShop(p: Product) {
-    setSelectedCollection('All')
+    setSelectedCategory('all')
+    setSelectedCollection('all')
     setInStockOnly(false)
     setSearchQuery(p.name)
-    document.getElementById('shop')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    scrollToShop()
   }
 
   const selectedShape = BESPOKE_SHAPES.find((s) => s.id === shapeId) || BESPOKE_SHAPES[0]
@@ -287,6 +373,94 @@ export function StorefrontClient() {
       ? 'bg-[#0B3D3A] border-[#E6C975]'
       : 'bg-[#04201F] border-[#5F918A] hover:border-[#E6C975] active:bg-[#062E2C]'
 
+  /** One product card; `key` lets the same piece appear in two groups safely. */
+  const renderProduct = (product: Product, key?: string) => {
+    const soldOut = product.stock <= 0
+    const withOptions = hasVariants(product)
+    // For options, "only N left" would mislead: N is spread across colours and sizes.
+    const lowStock = !withOptions && product.stock > 0 && product.stock <= 2
+    const range = priceRange(product)
+    const summary = optionsSummary(product)
+
+    return (
+      <li key={key ?? product.id}>
+        <article className="group h-full flex flex-col">
+          <div className="relative aspect-[4/5] rounded-xl overflow-hidden bg-[#E8DEC8]">
+            <img
+              src={product.imageUrl}
+              alt={product.name}
+              width={600}
+              height={750}
+              loading="lazy"
+              decoding="async"
+              className={`w-full h-full object-cover transition-transform duration-200 motion-safe:group-hover:scale-[1.03] ${
+                soldOut ? 'opacity-60 grayscale' : ''
+              }`}
+            />
+            {product.tag && !soldOut && (
+              <span className="absolute top-2 left-2 sm:top-3 sm:left-3 max-w-[calc(100%-1rem)] truncate bg-[#FAF8F4]/95 text-[#0F1F1D] text-xs font-medium px-2 py-1 rounded-md">
+                {product.tag}
+              </span>
+            )}
+            {soldOut && (
+              <span className="absolute inset-x-0 bottom-0 bg-[#0F1F1D]/85 text-white text-xs font-semibold uppercase tracking-[0.14em] text-center py-2">
+                Sold out
+              </span>
+            )}
+          </div>
+
+          <div className="pt-3 sm:pt-4 flex-1 flex flex-col">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#56625F] truncate">
+              {[categoryOf(product, catalog)?.name, collectionName(product, catalog)].filter(Boolean).join(' · ')}
+            </p>
+            <h3 className="mt-1 font-serif-display text-[17px] sm:text-lg font-medium leading-snug text-[#0F1F1D]">
+              {product.name}
+            </h3>
+            <div className="mt-1 flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
+              <p className="text-sm sm:text-[15px] font-semibold text-[#0B3D3A] tabular-nums">
+                {range.min !== range.max ? `From ${formatNaira(range.min)}` : formatNaira(range.min)}
+              </p>
+              {lowStock && (
+                <p className="text-xs font-medium text-[#8A6A12]">Only {product.stock} left</p>
+              )}
+            </div>
+            {summary && <p className="mt-1 text-xs text-[#3F4F4C]">{summary}</p>}
+
+            <div className="mt-auto pt-3 sm:pt-4">
+              <button
+                type="button"
+                disabled={soldOut}
+                aria-label={
+                  soldOut
+                    ? `${product.name} is sold out`
+                    : withOptions
+                    ? `Choose options for ${product.name}`
+                    : `Add ${product.name} to bag`
+                }
+                aria-haspopup={withOptions ? 'dialog' : undefined}
+                onClick={() => {
+                  if (withOptions) {
+                    setOptionsFor(product)
+                    return
+                  }
+                  addItem(product, 1)
+                  setDrawerOpen(true)
+                }}
+                className={`w-full min-h-[44px] px-3 rounded-xl border text-sm font-semibold transition-colors duration-150 ${
+                  soldOut
+                    ? 'bg-[#F4EFE6] text-[#56625F] border-[#E2DACA] cursor-not-allowed'
+                    : 'border-[#0B3D3A] text-[#0B3D3A] hover:bg-[#0B3D3A] hover:text-white active:bg-[#04201F] active:text-white'
+                }`}
+              >
+                {soldOut ? 'Sold out' : withOptions ? 'Choose options' : 'Add to bag'}
+              </button>
+            </div>
+          </div>
+        </article>
+      </li>
+    )
+  }
+
   return (
     <main>
       {/* HERO: the logo's deep teal, one brand moment, type first */}
@@ -319,6 +493,28 @@ export function StorefrontClient() {
                 <ArrowRight className="w-4 h-4" aria-hidden="true" />
               </a>
             </div>
+
+            {/* Straight to what they came for: shown once there's a real choice of categories */}
+            {categoryTabs.length > 1 && (
+            <nav aria-label="Shop by category" className="mt-8">
+              <ul className="flex flex-wrap justify-center gap-2">
+                {categoryTabs.map((c) => (
+                  <li key={c.id}>
+                    <a
+                      href={`/?category=${encodeURIComponent(c.id)}#shop`}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        openCategory(c.id)
+                      }}
+                      className="min-h-[44px] px-4 rounded-full border border-white/20 hover:border-[#E6C975] hover:text-[#E6C975] text-sm font-medium text-[#FAF8F4] inline-flex items-center transition-colors duration-150"
+                    >
+                      {c.name}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+            )}
           </div>
 
           {/* Featured pieces: small and sharp, since photos are shown near their real size */}
@@ -383,19 +579,56 @@ export function StorefrontClient() {
       {/* SHOP CATALOG */}
       <section id="shop" aria-labelledby="shop-heading" className="py-14 sm:py-20">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          {/* Breadcrumb: where the visitor is, and one tap back up */}
+          <nav aria-label="Breadcrumb" className="mb-3">
+            <ol className="flex flex-wrap items-center gap-x-1.5 text-sm text-[#3F4F4C]">
+              {[
+                { label: 'Shop', onClick: clearFilters, current: !activeCategory && !activeCollection },
+                ...(activeCategory
+                  ? [
+                      {
+                        label: activeCategory.name,
+                        onClick: () => setSelectedCollection('all'),
+                        current: !activeCollection,
+                      },
+                    ]
+                  : []),
+                ...(activeCollection ? [{ label: activeCollection.name, onClick: () => {}, current: true }] : []),
+              ].map((crumb, i) => (
+                <li key={`${crumb.label}-${i}`} className="inline-flex items-center gap-1.5">
+                  {i > 0 && <ChevronRight className="w-3.5 h-3.5 text-[#8C8270]" aria-hidden="true" />}
+                  {crumb.current ? (
+                    <span aria-current="page" className="font-semibold text-[#0F1F1D]">
+                      {crumb.label}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={crumb.onClick}
+                      className="min-h-[44px] inline-flex items-center underline-offset-4 hover:underline hover:text-[#0B3D3A]"
+                    >
+                      {crumb.label}
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ol>
+          </nav>
           <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2 mb-6">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#12564F]">Ready to ship</p>
               <h2
                 id="shop-heading"
-                className="mt-3 font-serif-display font-medium text-3xl sm:text-4xl tracking-[-0.01em] text-[#04201F]"
+                className="font-serif-display font-medium text-3xl sm:text-4xl tracking-[-0.01em] text-[#04201F]"
               >
-                The collection
+                {activeCollection?.name ?? activeCategory?.name ?? 'The collection'}
               </h2>
+              {activeCollection?.description && (
+                <p className="mt-2 text-sm text-[#3F4F4C] leading-relaxed max-w-xl">{activeCollection.description}</p>
+              )}
             </div>
             {!loadingProducts && products.length > 0 && (
               <p className="text-sm text-[#3F4F4C] tabular-nums">
-                {products.length} {products.length === 1 ? 'piece' : 'pieces'}
+                {products.length} {products.length === 1 ? 'piece' : 'pieces'} in the shop
               </p>
             )}
           </div>
@@ -467,18 +700,48 @@ export function StorefrontClient() {
             </div>
           </div>
 
-          {/* Collections: one swipeable row, with counts */}
-          {collections.length > 2 && (
-            <div className="-mx-4 px-4 sm:mx-0 sm:px-0 pt-4 overflow-x-auto no-scrollbar">
-              <div className="flex gap-2 w-max" role="group" aria-label="Filter by collection">
-                {collections.map((col) => {
-                  const active = col.name === selectedCollection
+          {/* Categories: the main way in. One swipeable row of tabs. */}
+          {categoryTabs.length > 1 && (
+            <div className="-mx-4 px-4 sm:mx-0 sm:px-0 mt-4 overflow-x-auto no-scrollbar border-b border-[#E2DACA]">
+              <div className="flex gap-6 w-max" role="group" aria-label="Shop by category">
+                {[{ id: 'all', name: 'All', count: products.length }, ...categoryTabs].map((tab) => {
+                  const active = tab.id === selectedCategory
                   return (
                     <button
-                      key={col.name}
+                      key={tab.id}
                       type="button"
                       aria-pressed={active}
-                      onClick={() => setSelectedCollection(col.name)}
+                      onClick={() => {
+                        setSelectedCategory(tab.id)
+                        setSelectedCollection('all')
+                      }}
+                      className={`min-h-[48px] -mb-px border-b-2 whitespace-nowrap text-[15px] transition-colors duration-150 ${
+                        active
+                          ? 'border-[#0B3D3A] text-[#0F1F1D] font-semibold'
+                          : 'border-transparent text-[#3F4F4C] font-medium hover:text-[#0B3D3A]'
+                      }`}
+                    >
+                      {tab.name}
+                      <span className="ml-1.5 text-xs tabular-nums text-[#56625F]">{tab.count}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Collections inside the chosen category */}
+          {collectionChips.length > 1 && (
+            <div className="-mx-4 px-4 sm:mx-0 sm:px-0 pt-4 overflow-x-auto no-scrollbar">
+              <div className="flex gap-2 w-max" role="group" aria-label="Filter by collection">
+                {[{ id: 'all', name: 'All collections', count: 0 }, ...collectionChips].map((col) => {
+                  const active = col.id === selectedCollection
+                  return (
+                    <button
+                      key={col.id}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setSelectedCollection(col.id)}
                       className={`min-h-[44px] px-4 rounded-full whitespace-nowrap text-sm font-medium border transition-colors duration-150 ${
                         active
                           ? 'bg-[#0F1F1D] text-white border-[#0F1F1D]'
@@ -486,7 +749,9 @@ export function StorefrontClient() {
                       }`}
                     >
                       {col.name}
-                      <span className={`ml-1.5 tabular-nums ${active ? 'text-white/70' : 'text-[#56625F]'}`}>{col.count}</span>
+                      {col.id !== 'all' && (
+                        <span className={`ml-1.5 tabular-nums ${active ? 'text-white/70' : 'text-[#56625F]'}`}>{col.count}</span>
+                      )}
                     </button>
                   )
                 })}
@@ -580,11 +845,17 @@ export function StorefrontClient() {
           ) : filteredProducts.length === 0 ? (
             <div className="bg-white rounded-2xl border border-[#E2DACA] py-14 px-6 text-center">
               <PackageX className="w-7 h-7 text-[#3F4F4C] mx-auto" aria-hidden="true" />
-              <h3 className="mt-4 font-serif-display text-xl font-medium text-[#0F1F1D]">No pieces match</h3>
+              <h3 className="mt-4 font-serif-display text-xl font-medium text-[#0F1F1D]">
+                {activeCategory && !searchQuery.trim() && !activeCollection && !inStockOnly
+                  ? `No ${activeCategory.name.toLowerCase()} in the shop yet`
+                  : 'No pieces match'}
+              </h3>
               <p className="mt-2 text-sm text-[#3F4F4C] leading-relaxed max-w-md mx-auto">
-                {inStockOnly
+                {activeCategory && !searchQuery.trim() && !activeCollection && !inStockOnly
+                  ? `New ${activeCategory.name.toLowerCase()} are on the way. We can also make one to order in your colours.`
+                  : inStockOnly
                   ? 'Nothing in stock matches these filters. Try showing sold-out pieces too, or ask for one in your colours.'
-                  : 'Try a different search or collection.'}
+                  : 'Try a different search, category or collection.'}
               </p>
               <div className="mt-6 flex flex-wrap justify-center gap-2">
                 <button
@@ -592,7 +863,7 @@ export function StorefrontClient() {
                   onClick={clearFilters}
                   className="min-h-[44px] px-5 rounded-xl bg-[#0B3D3A] hover:bg-[#04201F] text-white text-sm font-semibold transition-colors duration-150"
                 >
-                  Clear filters
+                  See everything
                 </button>
                 <a
                   href="#custom"
@@ -602,95 +873,38 @@ export function StorefrontClient() {
                 </a>
               </div>
             </div>
+          ) : groups ? (
+            <div className="space-y-14">
+              {groups.map((g) => (
+                <section key={g.id || 'more'} aria-labelledby={`group-${g.id || 'more'}`}>
+                  <div className="flex items-end justify-between gap-4 mb-5">
+                    <h3
+                      id={`group-${g.id || 'more'}`}
+                      className="font-serif-display text-2xl font-medium text-[#04201F]"
+                    >
+                      {g.name}
+                    </h3>
+                    {g.id && g.count > g.items.length && (
+                      <button
+                        type="button"
+                        onClick={() => openCategory(g.id)}
+                        className="min-h-[44px] shrink-0 inline-flex items-center gap-1 text-sm font-semibold text-[#0B3D3A] underline-offset-4 hover:underline"
+                      >
+                        View all {g.count}
+                        <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                      </button>
+                    )}
+                  </div>
+                  <ul className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-10 sm:gap-x-6">
+                    {g.items.map((p) => renderProduct(p, `${g.id}-${p.id}`))}
+                  </ul>
+                </section>
+              ))}
+            </div>
           ) : (
             <>
               <ul className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-10 sm:gap-x-6">
-                {shownProducts.map((product) => {
-                  const soldOut = product.stock <= 0
-                  const withOptions = hasVariants(product)
-                  // For options, "only N left" would mislead: N is spread across colours and sizes.
-                  const lowStock = !withOptions && product.stock > 0 && product.stock <= 2
-                  const range = priceRange(product)
-                  const summary = optionsSummary(product)
-
-                  return (
-                    <li key={product.id}>
-                      <article className="group h-full flex flex-col">
-                        <div className="relative aspect-[4/5] rounded-xl overflow-hidden bg-[#E8DEC8]">
-                          <img
-                            src={product.imageUrl}
-                            alt={product.name}
-                            width={600}
-                            height={750}
-                            loading="lazy"
-                            decoding="async"
-                            className={`w-full h-full object-cover transition-transform duration-200 motion-safe:group-hover:scale-[1.03] ${
-                              soldOut ? 'opacity-60 grayscale' : ''
-                            }`}
-                          />
-                          {product.tag && !soldOut && (
-                            <span className="absolute top-2 left-2 sm:top-3 sm:left-3 max-w-[calc(100%-1rem)] truncate bg-[#FAF8F4]/95 text-[#0F1F1D] text-xs font-medium px-2 py-1 rounded-md">
-                              {product.tag}
-                            </span>
-                          )}
-                          {soldOut && (
-                            <span className="absolute inset-x-0 bottom-0 bg-[#0F1F1D]/85 text-white text-xs font-semibold uppercase tracking-[0.14em] text-center py-2">
-                              Sold out
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="pt-3 sm:pt-4 flex-1 flex flex-col">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#56625F] truncate">
-                            {product.collection}
-                          </p>
-                          <h3 className="mt-1 font-serif-display text-[17px] sm:text-lg font-medium leading-snug text-[#0F1F1D]">
-                            {product.name}
-                          </h3>
-                          <div className="mt-1 flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
-                            <p className="text-sm sm:text-[15px] font-semibold text-[#0B3D3A] tabular-nums">
-                              {range.min !== range.max ? `From ${formatNaira(range.min)}` : formatNaira(range.min)}
-                            </p>
-                            {lowStock && (
-                              <p className="text-xs font-medium text-[#8A6A12]">Only {product.stock} left</p>
-                            )}
-                          </div>
-                          {summary && <p className="mt-1 text-xs text-[#3F4F4C]">{summary}</p>}
-
-                          <div className="mt-auto pt-3 sm:pt-4">
-                            <button
-                              type="button"
-                              disabled={soldOut}
-                              aria-label={
-                                soldOut
-                                  ? `${product.name} is sold out`
-                                  : withOptions
-                                  ? `Choose options for ${product.name}`
-                                  : `Add ${product.name} to bag`
-                              }
-                              aria-haspopup={withOptions ? 'dialog' : undefined}
-                              onClick={() => {
-                                if (withOptions) {
-                                  setOptionsFor(product)
-                                  return
-                                }
-                                addItem(product, 1)
-                                setDrawerOpen(true)
-                              }}
-                              className={`w-full min-h-[44px] px-3 rounded-xl border text-sm font-semibold transition-colors duration-150 ${
-                                soldOut
-                                  ? 'bg-[#F4EFE6] text-[#56625F] border-[#E2DACA] cursor-not-allowed'
-                                  : 'border-[#0B3D3A] text-[#0B3D3A] hover:bg-[#0B3D3A] hover:text-white active:bg-[#04201F] active:text-white'
-                              }`}
-                            >
-                              {soldOut ? 'Sold out' : withOptions ? 'Choose options' : 'Add to bag'}
-                            </button>
-                          </div>
-                        </div>
-                      </article>
-                    </li>
-                  )
-                })}
+                {shownProducts.map((product) => renderProduct(product))}
               </ul>
 
               {filteredProducts.length > shownProducts.length && (
@@ -988,6 +1202,12 @@ export function StorefrontClient() {
 
       <ProductOptionsDialog
         product={optionsFor}
+        eyebrow={
+          optionsFor
+            ? [categoryOf(optionsFor, catalog)?.name, collectionName(optionsFor, catalog)].filter(Boolean).join(' · ')
+            : undefined
+        }
+        sizeLabel={optionsFor ? sizeLabelFor(optionsFor, catalog) : undefined}
         onClose={() => setOptionsFor(null)}
         onAdd={(product, variant) => {
           addItem(product, 1, variant)

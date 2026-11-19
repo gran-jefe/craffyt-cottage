@@ -1,10 +1,22 @@
-import type { Product, StoreSettings } from '@/types/store'
+import type { Catalog, Product, StoreSettings } from '@/types/store'
+
+/** Starting shop structure until the admin saves their own in Admin › Catalogue. */
+export const DEFAULT_CATALOG: Catalog = {
+  categories: [
+    { id: 'bags', name: 'Bags' },
+    { id: 'waist-beads', name: 'Waist beads', sizeLabel: 'Waist size (inches)' },
+    { id: 'neckpieces', name: 'Neckpieces' },
+  ],
+  collections: [{ id: 'prima', name: 'Prima Collection' }],
+}
 
 export const DEFAULT_PRODUCTS: Product[] = [
   {
     id: 'dupree-midi',
     name: 'Dupree Midi',
     collection: 'Prima Collection',
+    categoryId: 'bags',
+    collectionId: 'prima',
     price: 45000,
     // Always the sum of the variants' stock.
     stock: 7,
@@ -25,6 +37,8 @@ export const DEFAULT_PRODUCTS: Product[] = [
     id: 'pearly',
     name: 'Pearly',
     collection: 'Prima Collection',
+    categoryId: 'bags',
+    collectionId: 'prima',
     price: 35000,
     stock: 5,
     tag: 'Oversized Pearls',
@@ -40,6 +54,8 @@ export const DEFAULT_PRODUCTS: Product[] = [
     id: 'first-lady',
     name: 'First Lady',
     collection: 'Prima Collection',
+    categoryId: 'bags',
+    collectionId: 'prima',
     price: 40000,
     stock: 2,
     tag: 'Fringe Clutch',

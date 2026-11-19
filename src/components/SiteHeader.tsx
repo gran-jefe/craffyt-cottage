@@ -6,6 +6,7 @@ import { BrandLogo } from '@/components/BrandLogo'
 import { ShoppingBag, Menu, X } from 'lucide-react'
 import { useCart } from '@/context/CartContext'
 import { isDemoMode } from '@/lib/firebase'
+import { useCatalog } from '@/lib/useCatalog'
 
 const NAV = [
   { href: '/#shop', label: 'Shop' },
@@ -13,9 +14,21 @@ const NAV = [
   { href: '/track', label: 'Track order' },
 ]
 
+/** Wide screens show categories directly; more than this and the rest live under "Shop all". */
+const MAX_HEADER_CATEGORIES = 4
+
+const categoryHref = (id: string) => `/?category=${encodeURIComponent(id)}#shop`
+
 export function SiteHeader() {
   const { totalCount, setDrawerOpen } = useCart()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const { catalog } = useCatalog()
+  const headerCategories = catalog.categories.slice(0, MAX_HEADER_CATEGORIES)
+  const desktopNav = [
+    ...headerCategories.map((c) => ({ href: categoryHref(c.id), label: c.name })),
+    ...(catalog.categories.length > MAX_HEADER_CATEGORIES ? [{ href: '/#shop', label: 'Shop all' }] : []),
+    ...NAV.slice(1),
+  ]
 
   useEffect(() => {
     if (!mobileOpen) return
@@ -38,12 +51,24 @@ export function SiteHeader() {
           <BrandLogo className="text-[19px] sm:text-[21px]" title="Crafty Cottage" />
         </Link>
 
-        <nav className="hidden md:flex items-center gap-1" aria-label="Main navigation">
+        {/* Tablets: the short menu. Laptops and up: categories directly, one click to what they want. */}
+        <nav className="hidden md:flex lg:hidden items-center gap-1" aria-label="Main navigation">
           {NAV.map((item) => (
             <Link
               key={item.href}
               href={item.href}
               className="min-h-[44px] px-3.5 rounded-lg text-sm font-medium text-[#3F4F4C] hover:text-[#04201F] flex items-center transition-colors duration-150"
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+        <nav className="hidden lg:flex items-center gap-1" aria-label="Main navigation">
+          {desktopNav.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="min-h-[44px] px-3 rounded-lg text-sm font-medium text-[#3F4F4C] hover:text-[#04201F] flex items-center whitespace-nowrap transition-colors duration-150"
             >
               {item.label}
             </Link>
@@ -88,8 +113,24 @@ export function SiteHeader() {
           aria-label="Mobile navigation"
           className="md:hidden border-t border-[#E2DACA] bg-[#FAF8F4] px-4 pb-4"
         >
-          <ul className="divide-y divide-[#E2DACA]">
-            {NAV.map((item) => (
+          <p className="pt-4 pb-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#12564F]">Shop</p>
+          <ul className="grid grid-cols-2 gap-x-4">
+            {[{ href: '/#shop', label: 'Everything' }, ...catalog.categories.map((c) => ({ href: categoryHref(c.id), label: c.name }))].map(
+              (item) => (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    onClick={() => setMobileOpen(false)}
+                    className="min-h-[48px] flex items-center font-serif-display text-lg text-[#04201F]"
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              )
+            )}
+          </ul>
+          <ul className="mt-2 divide-y divide-[#E2DACA] border-t border-[#E2DACA]">
+            {NAV.slice(1).map((item) => (
               <li key={item.href}>
                 <Link
                   href={item.href}

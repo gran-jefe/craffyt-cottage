@@ -9,6 +9,10 @@ import type { Product, ProductVariant } from '@/types/store'
 
 interface Props {
   product: Product | null
+  /** Small line above the name, e.g. "Waist beads · Owambe Collection". */
+  eyebrow?: string
+  /** What size means for this product, e.g. "Waist size (inches)". */
+  sizeLabel?: string
   onClose: () => void
   onAdd: (product: Product, variant: ProductVariant) => void
 }
@@ -19,12 +23,18 @@ function initialSelection(variants: ProductVariant[]): { color: string; size: st
   return { color: first?.color ?? '', size: first?.size ?? '' }
 }
 
-export function ProductOptionsDialog({ product, onClose, onAdd }: Props) {
+/** Numeric sizes (31, 32, 32.5) in number order; anything else keeps the admin's order. */
+function orderSizes(sizes: string[]): string[] {
+  const numeric = sizes.every((s) => /^\d+(\.\d+)?$/.test(s))
+  return numeric ? [...sizes].sort((a, b) => Number(a) - Number(b)) : sizes
+}
+
+export function ProductOptionsDialog({ product, eyebrow, sizeLabel = 'Size', onClose, onAdd }: Props) {
   const open = Boolean(product)
   const panelRef = useDialogFocus<HTMLDivElement>(open)
   const variants = useMemo(() => product?.variants ?? [], [product])
   const colors = useMemo(() => uniqueOptions(variants, 'color'), [variants])
-  const sizes = useMemo(() => uniqueOptions(variants, 'size'), [variants])
+  const sizes = useMemo(() => orderSizes(uniqueOptions(variants, 'size')), [variants])
 
   const [color, setColor] = useState('')
   const [size, setSize] = useState('')
@@ -49,6 +59,15 @@ export function ProductOptionsDialog({ product, onClose, onAdd }: Props) {
 
   const match = (c: string, s: string) => variants.find((v) => v.color.trim() === c && v.size.trim() === s)
   const selected = match(color, size)
+  /** True when, for the chosen colour, sizes don't all cost the same. */
+  const pricesVaryBySize =
+    sizes.length > 1 &&
+    new Set(
+      sizes
+        .map((s) => match(colors.length > 0 ? color : '', s))
+        .filter((v): v is ProductVariant => Boolean(v))
+        .map((v) => variantPrice(product, v))
+    ).size > 1
 
   const colorInStock = (c: string) => variants.some((v) => v.color.trim() === c && v.stock > 0)
   const sizeInStock = (s: string) => {
@@ -118,7 +137,7 @@ export function ProductOptionsDialog({ product, onClose, onAdd }: Props) {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#12564F]">
-                  {product.collection}
+                  {eyebrow || product.collection}
                 </p>
                 <h2 id="options-title" className="mt-2 font-serif-display font-medium text-2xl leading-tight text-[#04201F]">
                   {product.name}
@@ -170,21 +189,31 @@ export function ProductOptionsDialog({ product, onClose, onAdd }: Props) {
             {sizes.length > 0 && (
               <fieldset className="mt-5">
                 <legend className="text-sm text-[#3F4F4C]">
-                  Size: <span className="font-semibold text-[#0F1F1D]">{size}</span>
+                  {sizeLabel}: <span className="font-semibold text-[#0F1F1D]">{size}</span>
                 </legend>
                 <div className="mt-2.5 flex flex-wrap gap-2">
                   {sizes.map((s) => {
                     const available = sizeInStock(s)
+                    const v = match(colors.length > 0 ? color : '', s)
+                    const sizePrice = v ? variantPrice(product, v) : null
                     return (
                       <button
                         key={s}
                         type="button"
                         aria-pressed={s === size}
-                        aria-label={available ? s : `${s}, not available in this colour`}
+                        aria-label={`${s}${sizePrice !== null && pricesVaryBySize ? `, ${formatNaira(sizePrice)}` : ''}${
+                          available ? '' : ', not available in this colour'
+                        }`}
                         onClick={() => setSize(s)}
-                        className={chip(s === size, available)}
+                        className={`${chip(s === size, available)} ${pricesVaryBySize ? 'flex-col !gap-0 py-1.5 leading-tight' : ''}`}
                       >
-                        {s}
+                        <span>{s}</span>
+                        {/* Bigger sizes can cost more: show each size's price right on it. */}
+                        {pricesVaryBySize && sizePrice !== null && (
+                          <span className={`text-[11px] tabular-nums no-underline ${s === size ? 'text-white/80' : 'text-[#3F4F4C]'}`}>
+                            {formatNaira(sizePrice)}
+                          </span>
+                        )}
                       </button>
                     )
                   })}
