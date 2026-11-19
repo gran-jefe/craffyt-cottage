@@ -24,7 +24,7 @@ export function StatTile({ label, metric, format, compareLabel, upIsGood = true 
     // Previous period was zero: a percentage would be infinite, so say it plainly.
     delta = (
       <span className="text-[#4A5240]">
-        {metric.value > 0 ? 'Up from nothing' : 'None in either period'} {compareLabel}
+        {metric.value > 0 ? 'Up from nothing' : metric.value < 0 ? 'Down from nothing' : 'None in either period'} {compareLabel}
       </span>
     )
   } else {

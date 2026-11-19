@@ -18,10 +18,12 @@ import {
   saveProduct,
   seedInitialProducts,
   uploadMediaFile,
+  usesCloudStorage,
 } from '@/lib/storeService'
 import { formatNaira } from '@/lib/defaults'
 import { useCart } from '@/context/CartContext'
-import type { Product } from '@/types/store'
+import { hasVariants, newVariantId, sumStock, variantLabel, variantPrice } from '@/lib/variants'
+import type { Product, ProductVariant } from '@/types/store'
 import { useDialogFocus } from '@/lib/useDialogFocus'
 
 interface Props {
@@ -29,7 +31,26 @@ interface Props {
   onRefresh: () => Promise<void>
 }
 
+interface VariantDraft {
+  id: string
+  color: string
+  size: string
+  /** Blank means "same as the product price". */
+  price: string
+  stock: string
+  imageUrl: string
+}
+
+function emptyVariant(stock = '1'): VariantDraft {
+  return { id: newVariantId(), color: '', size: '', price: '', stock, imageUrl: '' }
+}
+
+/** Firestore documents cap at 1 MB; inline (non-Storage) photos count towards it. */
+const MAX_INLINE_PRODUCT_BYTES = 900 * 1024
+
 interface ProductFormState {
+  hasOptions: boolean
+  variants: VariantDraft[]
   id?: string
   createdAt?: string
   name: string
@@ -54,6 +75,40 @@ const EMPTY_FORM: ProductFormState = {
   imageUrl: '',
   active: true,
   featured: false,
+  hasOptions: false,
+  variants: [],
+}
+
+/** Returns an admin-readable problem with the options, or '' when they can be saved. */
+function validateVariants(drafts: VariantDraft[]): string {
+  if (drafts.length === 0) return 'Add at least one option, or switch options off.'
+  const withColor = drafts.filter((d) => d.color.trim()).length
+  const withSize = drafts.filter((d) => d.size.trim()).length
+  if (drafts.some((d) => !d.color.trim() && !d.size.trim())) {
+    return 'Each option needs a colour, a size, or both.'
+  }
+  // Mixed rows can't be chosen on the storefront: "Gold" next to a blank colour has no button.
+  if (withColor > 0 && withColor < drafts.length) return 'Give every option a colour, or leave colour blank on all of them.'
+  if (withSize > 0 && withSize < drafts.length) return 'Give every option a size, or leave size blank on all of them.'
+  const seen = new Set<string>()
+  for (const d of drafts) {
+    const key = `${d.color.trim().toLowerCase()}|${d.size.trim().toLowerCase()}`
+    if (seen.has(key)) return `"${variantLabel(d)}" is listed twice. Each colour and size combination should appear once.`
+    seen.add(key)
+    const stock = Number(d.stock)
+    if (!Number.isInteger(stock) || stock < 0) return `Stock for "${variantLabel(d)}" must be 0 or a whole number.`
+    if (d.price.trim() && !(Number(d.price) > 0)) return `Price for "${variantLabel(d)}" must be above ₦0, or left blank.`
+  }
+  return ''
+}
+
+function toVariants(drafts: VariantDraft[]): ProductVariant[] {
+  return drafts.map((d) => {
+    const v: ProductVariant = { id: d.id, color: d.color.trim(), size: d.size.trim(), stock: Number(d.stock) }
+    if (d.price.trim()) v.price = Number(d.price)
+    if (d.imageUrl.trim()) v.imageUrl = d.imageUrl.trim()
+    return v
+  })
 }
 
 export function AdminInventory({ products, onRefresh }: Props) {
@@ -61,6 +116,7 @@ export function AdminInventory({ products, onRefresh }: Props) {
   const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState<ProductFormState>(EMPTY_FORM)
   const [uploadingImg, setUploadingImg] = useState(false)
+  const [uploadingVariantId, setUploadingVariantId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [seeding, setSeeding] = useState(false)
   const [formError, setFormError] = useState('')
@@ -78,11 +134,11 @@ export function AdminInventory({ products, onRefresh }: Props) {
   useEffect(() => {
     if (!modalOpen) return
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !saving && !uploadingImg) setModalOpen(false)
+      if (e.key === 'Escape' && !saving && !uploadingImg && !uploadingVariantId) setModalOpen(false)
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [modalOpen, saving, uploadingImg])
+  }, [modalOpen, saving, uploadingImg, uploadingVariantId])
 
   function openNew() {
     setForm(EMPTY_FORM)
@@ -103,6 +159,15 @@ export function AdminInventory({ products, onRefresh }: Props) {
       imageUrl: p.imageUrl,
       active: p.active,
       featured: p.featured,
+      hasOptions: hasVariants(p),
+      variants: (p.variants ?? []).map((v) => ({
+        id: v.id,
+        color: v.color,
+        size: v.size,
+        price: v.price ? String(v.price) : '',
+        stock: String(v.stock),
+        imageUrl: v.imageUrl ?? '',
+      })),
     })
     setFormError('')
     setModalOpen(true)
@@ -132,6 +197,43 @@ export function AdminInventory({ products, onRefresh }: Props) {
     }
   }
 
+  function updateVariant(id: string, patch: Partial<VariantDraft>) {
+    setForm((f) => ({ ...f, variants: f.variants.map((v) => (v.id === id ? { ...v, ...patch } : v)) }))
+  }
+
+  function setHasOptions(on: boolean) {
+    setForm((f) => ({
+      ...f,
+      hasOptions: on,
+      // Start with one row carrying the current stock so nothing is lost when switching on.
+      variants: on && f.variants.length === 0 ? [emptyVariant(f.stock || '0')] : f.variants,
+    }))
+  }
+
+  async function handleVariantImage(id: string, e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) {
+      setFormError('Option photos must be under 5 MB.')
+      return
+    }
+    setUploadingVariantId(id)
+    setFormError('')
+    try {
+      const url = await uploadMediaFile(file, 'products')
+      updateVariant(id, { imageUrl: url })
+    } catch (err) {
+      setFormError(
+        err instanceof ReceiptFileError
+          ? 'We couldn’t read this photo (iPhone HEIC photos often can’t be opened). Please use a JPG or PNG.'
+          : 'Could not upload the photo. Check your connection and try again.'
+      )
+    } finally {
+      setUploadingVariantId(null)
+    }
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
     setFormError('')
@@ -146,30 +248,47 @@ export function AdminInventory({ products, onRefresh }: Props) {
       setFormError('Please enter a valid price in Naira.')
       return
     }
-    if (!Number.isInteger(numStock) || numStock < 0) {
+    if (!form.hasOptions && (!Number.isInteger(numStock) || numStock < 0)) {
       setFormError('Stock count must be 0 or a positive whole number.')
       return
+    }
+    if (form.hasOptions) {
+      const problem = validateVariants(form.variants)
+      if (problem) {
+        setFormError(problem)
+        return
+      }
     }
     if (!form.imageUrl.trim()) {
       setFormError('Upload a photo of this piece (or paste its image URL) before saving.')
       return
     }
 
+    const variants = form.hasOptions ? toVariants(form.variants) : []
+    const input = {
+      id: form.id,
+      createdAt: form.createdAt,
+      name: form.name,
+      collection: form.collection || 'Prima Collection',
+      price: numPrice,
+      stock: form.hasOptions ? sumStock(variants) : numStock,
+      tag: form.tag,
+      description: form.description,
+      imageUrl: form.imageUrl,
+      active: form.active,
+      featured: form.featured,
+      variants,
+    }
+    if (!usesCloudStorage && new Blob([JSON.stringify(input)]).size > MAX_INLINE_PRODUCT_BYTES) {
+      setFormError(
+        'This product has too many photos to store in one record. Remove some option photos (options without a photo use the main one), or turn on Firebase Storage.'
+      )
+      return
+    }
+
     setSaving(true)
     try {
-      await saveProduct({
-        id: form.id,
-        createdAt: form.createdAt,
-        name: form.name,
-        collection: form.collection || 'Prima Collection',
-        price: numPrice,
-        stock: numStock,
-        tag: form.tag,
-        description: form.description,
-        imageUrl: form.imageUrl,
-        active: form.active,
-        featured: form.featured,
-      })
+      await saveProduct(input)
       await onRefresh()
       setModalOpen(false)
       showToast(form.id ? 'Product updated.' : 'New product added to store!')
@@ -180,14 +299,15 @@ export function AdminInventory({ products, onRefresh }: Props) {
     }
   }
 
-  async function handleStockDelta(product: Product, delta: number) {
-    setBusyId(product.id)
+  async function handleStockDelta(product: Product, delta: number, variant?: ProductVariant) {
+    const name = variant ? `${product.name} (${variantLabel(variant)})` : product.name
+    setBusyId(variant ? `${product.id}::${variant.id}` : product.id)
     try {
-      const next = await adjustProductStockBy(product.id, delta)
+      const next = await adjustProductStockBy(product.id, delta, variant?.id)
       await onRefresh()
-      showToast(`Stock for ${product.name} updated to ${next}.`)
+      showToast(`Stock for ${name} updated to ${next}.`)
     } catch {
-      showToast(`Could not update stock for ${product.name}. Check your connection and try again.`, 'error')
+      showToast(`Could not update stock for ${name}. Check your connection and try again.`, 'error')
     } finally {
       setBusyId(null)
     }
@@ -312,8 +432,58 @@ export function AdminInventory({ products, onRefresh }: Props) {
                   </span>
                 </div>
 
+                {hasVariants(product) && (
+                  <ul className="divide-y divide-[#F4EFE6] border-y border-[#F4EFE6]">
+                    {product.variants.map((v) => {
+                      const busy = busyId === `${product.id}::${v.id}`
+                      const label = variantLabel(v)
+                      return (
+                        <li key={v.id} className="flex items-center gap-2 py-1">
+                          {v.imageUrl && (
+                            <img src={v.imageUrl} alt="" width={28} height={28} className="w-7 h-7 rounded-md object-cover shrink-0" />
+                          )}
+                          <span className="flex-1 min-w-0 text-xs">
+                            <span className="block font-semibold text-[#17210E] truncate">{label}</span>
+                            {v.price ? (
+                              <span className="block text-[#4A5240] tabular-nums">{formatNaira(variantPrice(product, v))}</span>
+                            ) : null}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={busy || v.stock <= 0}
+                            onClick={() => handleStockDelta(product, -1, v)}
+                            aria-label={`Decrease stock for ${product.name}, ${label}`}
+                            className="min-w-[44px] min-h-[44px] rounded-lg border border-[#E2DACA] bg-[#FAF8F4] hover:bg-[#F4EFE6] disabled:opacity-40 flex items-center justify-center"
+                          >
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                          <span
+                            className={`text-xs font-bold w-7 text-center tabular-nums ${v.stock <= 0 ? 'text-[#B42318]' : ''}`}
+                          >
+                            {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin mx-auto" /> : v.stock}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => handleStockDelta(product, 1, v)}
+                            aria-label={`Increase stock for ${product.name}, ${label}`}
+                            className="min-w-[44px] min-h-[44px] rounded-lg border border-[#E2DACA] bg-[#FAF8F4] hover:bg-[#F4EFE6] disabled:opacity-40 flex items-center justify-center"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+
                 {/* Stock Controls & Actions */}
                 <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                  {hasVariants(product) ? (
+                    <span className="text-xs text-[#4A5240]">
+                      {product.variants.length} options · {product.stock} in total
+                    </span>
+                  ) : (
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
@@ -337,6 +507,7 @@ export function AdminInventory({ products, onRefresh }: Props) {
                       <Plus className="w-3.5 h-3.5" />
                     </button>
                   </div>
+                  )}
 
                   <div className="flex items-center gap-1.5">
                     <button
@@ -384,7 +555,7 @@ export function AdminInventory({ products, onRefresh }: Props) {
           role="dialog"
           aria-modal="true"
           aria-labelledby="product-modal-title"
-          onClick={() => !saving && !uploadingImg && setModalOpen(false)}
+          onClick={() => !saving && !uploadingImg && !uploadingVariantId && setModalOpen(false)}
         >
           <div
             ref={modalRef}
@@ -463,7 +634,7 @@ export function AdminInventory({ products, onRefresh }: Props) {
                     type="text"
                     value={form.name}
                     onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                    placeholder="e.g. Dupree Midi, Emerald"
+                    placeholder="e.g. Dupree Midi"
                     className="w-full min-h-[44px] px-3 rounded-xl border border-[#E2DACA] bg-[#FAF8F4] text-sm"
                   />
                 </div>
@@ -482,10 +653,10 @@ export function AdminInventory({ products, onRefresh }: Props) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className={`grid gap-3 ${form.hasOptions ? 'grid-cols-2' : 'grid-cols-3'}`}>
                 <div>
                   <label htmlFor="prod-price" className="block text-xs font-bold mb-1">
-                    Price (₦) *
+                    {form.hasOptions ? 'Base price (₦) *' : 'Price (₦) *'}
                   </label>
                   <input
                     id="prod-price"
@@ -497,6 +668,7 @@ export function AdminInventory({ products, onRefresh }: Props) {
                     className="w-full min-h-[44px] px-3 rounded-xl border border-[#E2DACA] bg-[#FAF8F4] text-sm"
                   />
                 </div>
+                {!form.hasOptions && (
                 <div>
                   <label htmlFor="prod-stock" className="block text-xs font-bold mb-1">
                     Stock quantity *
@@ -510,6 +682,7 @@ export function AdminInventory({ products, onRefresh }: Props) {
                     className="w-full min-h-[44px] px-3 rounded-xl border border-[#E2DACA] bg-[#FAF8F4] text-sm"
                   />
                 </div>
+                )}
                 <div>
                   <label htmlFor="prod-tag" className="block text-xs font-bold mb-1">
                     Badge
@@ -523,6 +696,158 @@ export function AdminInventory({ products, onRefresh }: Props) {
                     className="w-full min-h-[44px] px-3 rounded-xl border border-[#E2DACA] bg-[#FAF8F4] text-sm"
                   />
                 </div>
+              </div>
+
+              {/* Colour & size options */}
+              <div className="rounded-xl border border-[#E2DACA] p-3.5 space-y-3">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.hasOptions}
+                    onChange={(e) => setHasOptions(e.target.checked)}
+                    className="w-4 h-4 mt-0.5 accent-[#263E0F]"
+                  />
+                  <span>
+                    <span className="block text-sm font-semibold text-[#17210E]">
+                      Comes in different colours or sizes
+                    </span>
+                    <span className="block text-xs text-[#4A5240] leading-relaxed">
+                      Customers pick an option before adding to bag. Each option has its own stock, and can
+                      have its own price and photo.
+                    </span>
+                  </span>
+                </label>
+
+                {form.hasOptions && (
+                  <div className="space-y-2.5">
+                    {form.variants.map((v, index) => {
+                      const uploading = uploadingVariantId === v.id
+                      const n = index + 1
+                      return (
+                        <fieldset key={v.id} className="rounded-xl bg-[#FAF8F4] border border-[#E2DACA] p-3">
+                          <legend className="sr-only">Option {n}</legend>
+                          <div className="flex gap-3">
+                            <label
+                              htmlFor={`var-img-${v.id}`}
+                              className="w-14 h-14 rounded-lg border border-dashed border-[#8C8270] bg-white overflow-hidden grid place-items-center shrink-0 cursor-pointer hover:border-[#263E0F]"
+                              title="Upload a photo of this option"
+                            >
+                              {uploading ? (
+                                <Loader2 className="w-4 h-4 animate-spin text-[#263E0F]" />
+                              ) : v.imageUrl ? (
+                                <img src={v.imageUrl} alt="" width={56} height={56} className="w-full h-full object-cover" />
+                              ) : (
+                                <Upload className="w-4 h-4 text-[#4A5240]" />
+                              )}
+                              <span className="sr-only">Photo for option {n} (optional)</span>
+                              <input
+                                id={`var-img-${v.id}`}
+                                type="file"
+                                accept="image/*"
+                                disabled={uploading}
+                                onChange={(e) => handleVariantImage(v.id, e)}
+                                className="sr-only"
+                              />
+                            </label>
+                            <div className="flex-1 min-w-0 grid grid-cols-2 gap-2">
+                              <div>
+                                <label htmlFor={`var-color-${v.id}`} className="block text-xs font-semibold mb-1">
+                                  Colour
+                                </label>
+                                <input
+                                  id={`var-color-${v.id}`}
+                                  type="text"
+                                  value={v.color}
+                                  maxLength={40}
+                                  onChange={(e) => updateVariant(v.id, { color: e.target.value })}
+                                  placeholder="e.g. Gold"
+                                  className="w-full min-h-[44px] px-3 rounded-lg border border-[#E2DACA] bg-white text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label htmlFor={`var-size-${v.id}`} className="block text-xs font-semibold mb-1">
+                                  Size
+                                </label>
+                                <input
+                                  id={`var-size-${v.id}`}
+                                  type="text"
+                                  value={v.size}
+                                  maxLength={40}
+                                  onChange={(e) => updateVariant(v.id, { size: e.target.value })}
+                                  placeholder="e.g. Midi"
+                                  className="w-full min-h-[44px] px-3 rounded-lg border border-[#E2DACA] bg-white text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label htmlFor={`var-price-${v.id}`} className="block text-xs font-semibold mb-1">
+                                  Price (₦)
+                                </label>
+                                <input
+                                  id={`var-price-${v.id}`}
+                                  type="number"
+                                  min="1"
+                                  value={v.price}
+                                  onChange={(e) => updateVariant(v.id, { price: e.target.value })}
+                                  placeholder={form.price ? `${form.price} (base)` : 'Base price'}
+                                  className="w-full min-h-[44px] px-3 rounded-lg border border-[#E2DACA] bg-white text-sm tabular-nums"
+                                />
+                              </div>
+                              <div>
+                                <label htmlFor={`var-stock-${v.id}`} className="block text-xs font-semibold mb-1">
+                                  Stock *
+                                </label>
+                                <input
+                                  id={`var-stock-${v.id}`}
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  value={v.stock}
+                                  onChange={(e) => updateVariant(v.id, { stock: e.target.value })}
+                                  className="w-full min-h-[44px] px-3 rounded-lg border border-[#E2DACA] bg-white text-sm tabular-nums"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          <div className="mt-2 flex items-center justify-end gap-1">
+                            {v.imageUrl && (
+                              <button
+                                type="button"
+                                onClick={() => updateVariant(v.id, { imageUrl: '' })}
+                                className="min-h-[44px] px-3 rounded-lg text-xs font-semibold text-[#4A5240] hover:bg-[#F4EFE6]"
+                              >
+                                Remove photo
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setForm((f) => ({ ...f, variants: f.variants.filter((x) => x.id !== v.id) }))
+                              }
+                              aria-label={`Remove option ${n}${variantLabel(v) ? `, ${variantLabel(v)}` : ''}`}
+                              className="min-h-[44px] px-3 rounded-lg text-xs font-semibold text-[#B42318] hover:bg-red-50 flex items-center gap-1.5"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Remove</span>
+                            </button>
+                          </div>
+                        </fieldset>
+                      )
+                    })}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setForm((f) => ({ ...f, variants: [...f.variants, emptyVariant()] }))}
+                        className="min-h-[44px] px-3.5 rounded-xl border border-[#263E0F]/40 text-[#263E0F] hover:bg-[#EAF2DE] text-xs font-bold flex items-center gap-1.5"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add option</span>
+                      </button>
+                      <span className="text-xs text-[#4A5240] tabular-nums">
+                        Total stock: {sumStock(toVariants(form.variants.filter((d) => Number.isInteger(Number(d.stock)))))}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -576,7 +901,7 @@ export function AdminInventory({ products, onRefresh }: Props) {
                 </button>
                 <button
                   type="submit"
-                  disabled={saving || uploadingImg}
+                  disabled={saving || uploadingImg || Boolean(uploadingVariantId)}
                   className="min-h-[44px] px-6 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-xs font-bold flex items-center gap-2 disabled:opacity-60"
                 >
                   {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}

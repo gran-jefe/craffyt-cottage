@@ -13,11 +13,12 @@ import {
   Receipt,
   Settings,
   Sparkles,
+  Wallet,
   X,
 } from 'lucide-react'
 import { useDialogFocus } from '@/lib/useDialogFocus'
 
-export type AdminSection = 'overview' | 'inventory' | 'orders' | 'bespoke' | 'settings'
+export type AdminSection = 'overview' | 'inventory' | 'orders' | 'expenses' | 'bespoke' | 'settings'
 
 interface SectionDef {
   id: AdminSection
@@ -31,6 +32,7 @@ const NAV_GROUPS: { heading: string | null; items: SectionDef[] }[] = [
     heading: 'Shop',
     items: [
       { id: 'orders', label: 'Orders and sales', icon: Receipt },
+      { id: 'expenses', label: 'Expenses', icon: Wallet },
       { id: 'inventory', label: 'Inventory', icon: Package },
       { id: 'bespoke', label: 'Custom requests', icon: Sparkles },
     ],

@@ -23,7 +23,7 @@ const STEPS: { key: OrderStatus; label: string; desc: string }[] = [
   {
     key: 'processing',
     label: 'Preparing and packaging',
-    desc: 'Your beaded piece is being inspected and gift-packed in Ibadan.',
+    desc: 'Your beaded piece is being inspected and gift-packed for dispatch.',
   },
   {
     key: 'dispatched',

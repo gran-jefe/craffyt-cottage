@@ -71,3 +71,11 @@ label:has(> input[type='file']:focus-visible) {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Swipeable rows (e.g. collection filters on mobile) without a visible scrollbar. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

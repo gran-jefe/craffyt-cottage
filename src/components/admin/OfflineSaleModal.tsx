@@ -11,6 +11,7 @@ import {
 } from '@/lib/storeService'
 import { formatNaira } from '@/lib/defaults'
 import { useCart } from '@/context/CartContext'
+import { findVariant, hasVariants, variantLabel, variantPrice } from '@/lib/variants'
 import type { OrderItem, OrderStatus, PaymentMethod, Product } from '@/types/store'
 
 interface Props {
@@ -23,6 +24,8 @@ interface Props {
 interface LineItemDraft {
   key: string
   productId: string
+  /** Required when the product has colour/size options. */
+  variantId: string
   customName: string
   quantity: string
   unitPrice: string
@@ -63,14 +66,22 @@ function todayDateInput(): string {
   return `${y}-${m}-${d}`
 }
 
+/** Default option for a product: the first in stock, else the first listed. */
+function defaultVariant(p: Product | undefined) {
+  if (!p || !hasVariants(p)) return undefined
+  return p.variants.find((v) => v.stock > 0) ?? p.variants[0]
+}
+
 function createInitialLine(products: Product[]): LineItemDraft {
   const first = products[0]
+  const variant = defaultVariant(first)
   return {
     key: `line-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     productId: first ? first.id : 'custom',
+    variantId: variant?.id ?? '',
     customName: '',
     quantity: '1',
-    unitPrice: first ? String(first.price) : '',
+    unitPrice: first ? String(variant ? variantPrice(first, variant) : first.price) : '',
   }
 }
 
@@ -130,10 +141,20 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
 
   function handleProductChange(key: string, nextProductId: string) {
     const matched = products.find((p) => p.id === nextProductId)
+    const variant = defaultVariant(matched)
     updateLine(key, {
       productId: nextProductId,
-      unitPrice: matched ? String(matched.price) : '',
-      customName: nextProductId === 'custom' ? '' : '',
+      variantId: variant?.id ?? '',
+      unitPrice: matched ? String(variant ? variantPrice(matched, variant) : matched.price) : '',
+      customName: '',
+    })
+  }
+
+  function handleVariantChange(key: string, product: Product, variantId: string) {
+    const variant = findVariant(product, variantId)
+    updateLine(key, {
+      variantId,
+      unitPrice: variant ? String(variantPrice(product, variant)) : String(product.price),
     })
   }
 
@@ -171,13 +192,16 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
     }
   }
 
-  const parsedItems: { valid: boolean; item?: OrderItem; product?: Product }[] = lines.map((line) => {
+  const parsedItems: { valid: boolean; item?: OrderItem; product?: Product; available?: number }[] = lines.map((line) => {
     const qty = Number(line.quantity)
     const price = Number(line.unitPrice)
     const matched = products.find((p) => p.id === line.productId)
+    const variant = matched ? findVariant(matched, line.variantId) : undefined
+    const needsVariant = Boolean(matched && hasVariants(matched))
     const name = line.productId === 'custom' ? line.customName.trim() : matched?.name || ''
     const valid =
       Boolean(name) &&
+      (!needsVariant || Boolean(variant)) &&
       Number.isInteger(qty) &&
       qty >= 1 &&
       Number.isFinite(price) &&
@@ -185,9 +209,11 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
     return {
       valid,
       product: matched,
+      available: variant ? variant.stock : matched?.stock,
       item: valid
         ? {
             productId: line.productId === 'custom' ? 'custom' : line.productId,
+            ...(variant ? { variantId: variant.id, variantLabel: variantLabel(variant) } : {}),
             name,
             price,
             quantity: qty,
@@ -206,14 +232,14 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
   const hasCatalogItems = lines.some((l) => l.productId !== 'custom')
   const stockExceedsWarning =
     deductStock &&
-    parsedItems.some((entry) => entry.product && entry.item && entry.item.quantity > entry.product.stock)
+    parsedItems.some((entry) => entry.item && entry.available !== undefined && entry.item.quantity > entry.available)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
 
     if (parsedItems.some((entry) => !entry.valid || !entry.item)) {
-      setError('Each item needs a product name, a whole quantity of at least 1, and a valid unit price.')
+      setError('Each item needs a product name, an option where the product has them, a whole quantity of at least 1, and a valid unit price.')
       return
     }
 
@@ -328,7 +354,7 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
                       >
                         {products.map((p) => (
                           <option key={p.id} value={p.id}>
-                            {p.name} ({p.stock} in stock · {formatNaira(p.price)})
+                            {p.name} ({p.stock} in stock · {hasVariants(p) ? `${p.variants.length} options` : formatNaira(p.price)})
                           </option>
                         ))}
                         <option value="custom">Custom or unlisted item</option>
@@ -377,6 +403,30 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
                       </button>
                     </div>
                   </div>
+
+                  {(() => {
+                    const p = products.find((x) => x.id === line.productId)
+                    if (!p || !hasVariants(p)) return null
+                    return (
+                      <div>
+                        <label htmlFor={`offline-var-${line.key}`} className="block text-xs font-bold mb-1">
+                          Colour / size *
+                        </label>
+                        <select
+                          id={`offline-var-${line.key}`}
+                          value={line.variantId}
+                          onChange={(e) => handleVariantChange(line.key, p, e.target.value)}
+                          className="w-full min-h-[44px] px-3 rounded-xl border border-[#E2DACA] bg-white text-xs font-semibold"
+                        >
+                          {p.variants.map((v) => (
+                            <option key={v.id} value={v.id}>
+                              {variantLabel(v)} ({v.stock} in stock · {formatNaira(variantPrice(p, v))})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )
+                  })()}
 
                   {line.productId === 'custom' && (
                     <div>

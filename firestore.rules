@@ -24,6 +24,9 @@ service cloud.firestore {
     // Collection: bespokeRequests (Private PII — Admin Read/Manage, Guest Create)
     // Document ID: {requestId}
     //
+    // Collection: expenses (Private — Admin only)
+    // Document ID: {expenseId}
+    //
     // Collection: settings
     // Document ID: {settingId} ('store' is publicly readable via get only)
     //
@@ -94,7 +97,7 @@ service cloud.firestore {
     function isValidProduct(data) {
       let allowedKeys = [
         'name', 'collection', 'price', 'stock', 'tag',
-        'description', 'imageUrl', 'active', 'featured',
+        'description', 'imageUrl', 'active', 'featured', 'variants',
         'createdAt', 'updatedAt'
       ];
       let requiredKeys = [
@@ -112,6 +115,9 @@ service cloud.firestore {
         isSafeMediaValue(data.imageUrl, 1, false, 700000) &&
         data.active is bool &&
         data.featured is bool &&
+        // Colour/size options. Rules can't loop over a list, so each option's fields are
+        // shaped by the app; this caps the count so one product can't grow without bound.
+        (!('variants' in data) || (data.variants is list && data.variants.size() <= 40)) &&
         isValidTimestampOrString(data.createdAt) &&
         isValidTimestampOrString(data.updatedAt);
     }
@@ -242,6 +248,25 @@ service cloud.firestore {
         isValidTimestampOrString(data.createdAt);
     }
 
+    // Business costs, admin-only. periodKey names the day, month or year the amount covers.
+    function isValidExpense(data) {
+      let keys = [
+        'description', 'category', 'amount', 'period', 'periodKey', 'createdAt', 'updatedAt'
+      ];
+      return data.keys().hasOnly(keys) &&
+        data.keys().hasAll(keys) &&
+        validString(data.description, 1, 120) &&
+        validString(data.category, 1, 40) &&
+        data.amount is number && data.amount > 0 && data.amount < 1000000000 &&
+        (
+          (data.period == 'day' && data.periodKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')) ||
+          (data.period == 'month' && data.periodKey.matches('^[0-9]{4}-[0-9]{2}$')) ||
+          (data.period == 'year' && data.periodKey.matches('^[0-9]{4}$'))
+        ) &&
+        isValidTimestampOrString(data.createdAt) &&
+        isValidTimestampOrString(data.updatedAt);
+    }
+
     function isValidSettings(data) {
       return data is map &&
         data.keys().size() >= 1 &&
@@ -294,6 +319,15 @@ service cloud.firestore {
       allow get, list: if isAdmin();
       allow update: if isAdmin() &&
         isValidBespokeRequest(request.resource.data) &&
+        request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isAdmin();
+    }
+
+    match /expenses/{expenseId} {
+      allow get, list: if isAdmin();
+      allow create: if isAdmin() && isValidExpense(request.resource.data);
+      allow update: if isAdmin() &&
+        isValidExpense(request.resource.data) &&
         request.resource.data.createdAt == resource.data.createdAt;
       allow delete: if isAdmin();
     }

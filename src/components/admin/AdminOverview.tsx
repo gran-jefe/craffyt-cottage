@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useMemo, useState } from 'react'
-import { AlertCircle, AlertTriangle, CheckCircle2, LineChart, RotateCcw } from 'lucide-react'
+import { AlertCircle, AlertTriangle, CheckCircle2, LineChart, Plus, RotateCcw } from 'lucide-react'
 import {
   computeAttention,
   computeDashboard,
@@ -15,7 +15,7 @@ import {
   type PeriodPreset,
 } from '@/lib/analytics'
 import { formatNaira } from '@/lib/defaults'
-import type { BespokeRequest, BespokeStatus, Order, OrderStatus, Product } from '@/types/store'
+import type { BespokeRequest, BespokeStatus, Expense, Order, OrderStatus, Product } from '@/types/store'
 import { BarList, type BarListRow } from './analytics/BarList'
 import { ChartCard } from './analytics/ChartCard'
 import { SalesChart, SalesTable } from './analytics/SalesChart'
@@ -23,7 +23,7 @@ import { StatTile } from './analytics/StatTile'
 import type { SeriesKey } from './analytics/chartTheme'
 
 export type OverviewNavigate = (
-  tab: 'orders' | 'inventory' | 'bespoke',
+  tab: 'orders' | 'inventory' | 'bespoke' | 'expenses',
   options?: { orderStatus?: OrderStatus }
 ) => void
 
@@ -31,6 +31,9 @@ interface Props {
   orders: Order[]
   products: Product[]
   bespoke: BespokeRequest[]
+  expenses: Expense[]
+  /** Expenses failed to load: profit can't be worked out, so it isn't shown. */
+  expensesError: boolean
   /** True while a background refresh runs: keep the frame, dim it, never flash a skeleton. */
   refreshing: boolean
   onNavigate: OverviewNavigate
@@ -97,7 +100,7 @@ function saveFilters(filters: DashboardFilters) {
 
 /* ---------- Component ---------- */
 
-export function AdminOverview({ orders, products, bespoke, refreshing, onNavigate }: Props) {
+export function AdminOverview({ orders, products, bespoke, expenses, expensesError, refreshing, onNavigate }: Props) {
   const [filters, setFilters] = useState<DashboardFilters>(loadSavedFilters)
 
   useEffect(() => {
@@ -105,12 +108,12 @@ export function AdminOverview({ orders, products, bespoke, refreshing, onNavigat
   }, [filters])
 
   // "Now" moves forward whenever fresh data arrives, so today's sales land in today's bucket.
-  const now = useMemo(() => Date.now(), [orders, products, bespoke])
+  const now = useMemo(() => Date.now(), [orders, products, bespoke, expenses])
 
   const attention = useMemo(() => computeAttention(orders, products, bespoke, now), [orders, products, bespoke, now])
   const data = useMemo(
-    () => computeDashboard(orders, products, bespoke, filters, now),
-    [orders, products, bespoke, filters, now]
+    () => computeDashboard(orders, products, bespoke, filters, now, { expenses }),
+    [orders, products, bespoke, expenses, filters, now]
   )
 
   const series: SeriesKey[] =
@@ -178,7 +181,16 @@ export function AdminOverview({ orders, products, bespoke, refreshing, onNavigat
     valueLabel: String(data.bespoke.byStatus[st]),
   }))
 
-  const hasAnyOrders = orders.length > 0
+  const expenseRows: BarListRow[] = data.expensesByCategory.map((c) => ({
+    key: c.key,
+    label: c.label,
+    value: c.value,
+    valueLabel: formatNaira(Math.round(c.value)),
+    detail: `${c.orders} ${c.orders === 1 ? 'entry' : 'entries'}`,
+  }))
+  const roundedNaira = (v: number) => formatNaira(Math.round(v))
+
+  const hasAnyOrders = orders.length > 0 || expenses.length > 0
   const hasSales = data.sales.value > 0
 
   return (
@@ -370,6 +382,61 @@ export function AdminOverview({ orders, products, bespoke, refreshing, onNavigat
                       >
                         Show all time
                       </button>
+                    )}
+                  </div>
+                )}
+              </ChartCard>
+
+              <ChartCard
+                title="Profit after expenses"
+                subtitle={`Verified sales from all channels, minus expenses for ${data.range.rangeLabel}. Monthly and yearly costs are spread evenly over their days.`}
+                aside={
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('expenses')}
+                    className="min-h-[44px] px-4 rounded-xl border border-[#263E0F] text-[#263E0F] hover:bg-[#EAF2DE] text-xs font-bold inline-flex items-center gap-1.5 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span>Record expense</span>
+                  </button>
+                }
+              >
+                {expensesError ? (
+                  <p role="alert" className="flex items-start gap-2 text-sm text-[#7A1B14] bg-red-50 border border-red-200 rounded-xl p-3">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+                    Expenses couldn&apos;t be loaded, so profit isn&apos;t shown. Refresh the page to try again.
+                  </p>
+                ) : (
+                  <div className="space-y-5">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-px rounded-xl border border-[#E2DACA] bg-[#E2DACA] overflow-hidden">
+                      <StatTile label="Sales" metric={data.allSales} format={roundedNaira} compareLabel={data.range.compareLabel} />
+                      <StatTile
+                        label="Expenses"
+                        metric={data.expenses}
+                        format={roundedNaira}
+                        compareLabel={data.range.compareLabel}
+                        upIsGood={false}
+                      />
+                      <StatTile
+                        label={data.profit.value < 0 ? 'Loss' : 'Profit'}
+                        metric={data.profit}
+                        format={roundedNaira}
+                        compareLabel={data.range.compareLabel}
+                      />
+                    </div>
+                    {filters.channel !== 'all' && (
+                      <p className="text-xs text-[#4A5240] leading-relaxed">
+                        Profit uses sales from every channel, because expenses aren&apos;t split between online and offline.
+                      </p>
+                    )}
+                    {expenseRows.length > 0 ? (
+                      <BarList rows={expenseRows} label="Expenses by category" emptyText="" />
+                    ) : (
+                      <p className="text-sm text-[#4A5240] leading-relaxed">
+                        {expenses.length === 0
+                          ? 'No expenses recorded yet, so profit equals sales. Record costs like beads, packaging and delivery to see your real profit.'
+                          : 'No expenses fall in this period.'}
+                      </p>
                     )}
                   </div>
                 )}
