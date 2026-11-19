@@ -23,6 +23,7 @@ import {
   updateOrderStatus,
 } from '@/lib/storeService'
 import { formatNaira } from '@/lib/defaults'
+import { findVariant, variantPrice } from '@/lib/variants'
 import { useCart } from '@/context/CartContext'
 import { OfflineSaleModal } from '@/components/admin/OfflineSaleModal'
 import { useDialogFocus } from '@/lib/useDialogFocus'
@@ -34,6 +35,7 @@ import type {
   PaymentMethod,
   Product,
 } from '@/types/store'
+import { formatPhone, whatsappDigits } from '@/lib/phone'
 
 interface Props {
   orders: Order[]
@@ -168,10 +170,15 @@ function auditOrderTotals(order: Order, products: Product[], zones: DeliveryZone
   const live = new Map(products.map((p) => [p.id, p]))
   for (const item of order.items) {
     const p = live.get(item.productId)
-    if (!p) {
-      issues.push(`${item.name} (${formatNaira(item.price)}) isn't in your inventory. Check its price before confirming.`)
-    } else if (item.price < p.price) {
-      issues.push(`${item.name} was ordered at ${formatNaira(item.price)}; it is listed at ${formatNaira(p.price)} today.`)
+    const name = item.variantLabel ? `${item.name} (${item.variantLabel})` : item.name
+    const variant = p ? findVariant(p, item.variantId) : undefined
+    if (!p || (item.variantId && !variant)) {
+      issues.push(`${name} (${formatNaira(item.price)}) isn't in your inventory. Check its price before confirming.`)
+      continue
+    }
+    const listed = variant ? variantPrice(p, variant) : p.price
+    if (item.price < listed) {
+      issues.push(`${name} was ordered at ${formatNaira(item.price)}; it is listed at ${formatNaira(listed)} today.`)
     }
   }
   return issues
@@ -573,10 +580,7 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh, initia
           {filtered.map((order) => {
             const meta = STATUS_LABELS[order.status]
             const isOffline = order.channel === 'offline'
-            const phoneDigits = order.customerPhone.replace(/\D/g, '')
-            const waPhone = phoneDigits.startsWith('0')
-              ? `234${phoneDigits.slice(1)}`
-              : phoneDigits
+            const waPhone = whatsappDigits(order.customerPhone) ?? ''
             const zoneOrSource = order.offlineSource || order.deliveryZone
             // Units this order is holding off the shelf right now (what a cancel could put back).
             const heldUnits = isStockDeducted(order)
@@ -610,7 +614,7 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh, initia
                       {order.customerPhone && (
                         <>
                           {' '}
-                          · <span className="font-normal text-[#4A5240]">{order.customerPhone}</span>
+                          · <span className="font-normal text-[#4A5240]">{formatPhone(order.customerPhone)}</span>
                         </>
                       )}
                     </p>
@@ -638,6 +642,7 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh, initia
                     <li key={idx} className="flex justify-between">
                       <span>
                         <strong>{item.quantity}x</strong> {item.name}
+                        {item.variantLabel && <span className="text-[#4A5240]"> · {item.variantLabel}</span>}
                       </span>
                       <span className="font-semibold tabular-nums">
                         {formatNaira(item.price * item.quantity)}

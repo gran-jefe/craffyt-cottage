@@ -3,8 +3,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
-  ShoppingBag,
-  Sparkles,
   Palette,
   MessageCircle,
   Check,
@@ -14,7 +12,6 @@ import {
   Loader2,
   PackageX,
   ArrowRight,
-  ShieldCheck,
   AlertCircle,
 } from 'lucide-react'
 import { fetchProducts, fetchStoreSettings, createBespokeRequest } from '@/lib/storeService'
@@ -27,14 +24,31 @@ import {
   instagramUrl,
 } from '@/lib/defaults'
 import { useCart } from '@/context/CartContext'
+import { parsePhone } from '@/lib/phone'
+import { hasVariants, priceRange, uniqueOptions } from '@/lib/variants'
+import { ProductOptionsDialog } from '@/components/ProductOptionsDialog'
 import type { Product, StoreSettings } from '@/types/store'
+
+/** "3 colours · 2 sizes" for the product card. */
+function optionsSummary(p: Product): string {
+  if (!hasVariants(p)) return ''
+  const colors = uniqueOptions(p.variants, 'color').length
+  const sizes = uniqueOptions(p.variants, 'size').length
+  return [
+    colors > 1 ? `${colors} colours` : '',
+    sizes > 1 ? `${sizes} sizes` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
 
 function validateName(v: string): string | undefined {
   return v.trim().length < 2 ? 'Enter your name so we can follow up.' : undefined
 }
 
 function validatePhone(v: string): string | undefined {
-  return v.replace(/\D/g, '').length < 7 ? 'Enter a WhatsApp or phone number with at least 7 digits.' : undefined
+  const phone = parsePhone(v)
+  return phone.ok ? undefined : phone.error
 }
 
 export function StorefrontClient() {
@@ -49,6 +63,7 @@ export function StorefrontClient() {
   // Catalog filters
   const [selectedCollection, setSelectedCollection] = useState('All')
   const [searchQuery, setSearchQuery] = useState('')
+  const [optionsFor, setOptionsFor] = useState<Product | null>(null)
 
   // Bespoke studio form
   const [shapeId, setShapeId] = useState(BESPOKE_SHAPES[0].id)
@@ -101,7 +116,8 @@ export function StorefrontClient() {
         !q ||
         p.name.toLowerCase().includes(q) ||
         p.description.toLowerCase().includes(q) ||
-        p.tag.toLowerCase().includes(q)
+        p.tag.toLowerCase().includes(q) ||
+        (p.variants ?? []).some((v) => `${v.color} ${v.size}`.toLowerCase().includes(q))
       return matchesCol && matchesQ
     })
   }, [products, selectedCollection, searchQuery])
@@ -123,9 +139,10 @@ export function StorefrontClient() {
 
     setBespokeSubmitting(true)
     try {
+      const phone = parsePhone(customerPhone)
       await createBespokeRequest({
         customerName,
-        customerPhone,
+        customerPhone: phone.ok ? phone.e164 : customerPhone.trim(),
         shape: selectedShape.name,
         beadColour: selectedBead.name,
         estimatedPrice: bespokeTotal,
@@ -140,132 +157,126 @@ export function StorefrontClient() {
     }
   }
 
+  const whatsappSpecUrl = `https://wa.me/${settings.whatsappNumber}?text=${encodeURIComponent(
+    `Hello Crafty Cottage, I'd like to discuss a custom ${selectedShape.name} in ${selectedBead.name} (Est. ${formatNaira(bespokeTotal)}). ${notes}`
+  )}`
+
+  const optionBase =
+    'min-h-[56px] p-3 rounded-xl border text-left flex items-center gap-3 transition-colors duration-150'
+  const optionState = (checked: boolean) =>
+    checked
+      ? 'bg-[#263E0F] border-[#E6C975]'
+      : 'bg-[#111B07] border-[#7E9364] hover:border-[#E6C975] active:bg-[#1A2A0C]'
+
   return (
     <main>
       {/* HERO */}
-      <section className="py-10 sm:py-16 lg:py-20 border-b border-[#E2DACA]">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">
-          <div className="lg:col-span-7 space-y-5">
-            <p className="text-sm font-bold text-[#355416] uppercase tracking-wider">
-              The signature Prima Collection
+      <section className="border-b border-[#E2DACA]">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-8 pb-12 sm:pt-14 sm:pb-16 lg:py-20 grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-center">
+          <div className="lg:col-span-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#355416]">
+              The Prima Collection
             </p>
-            <h1 className="font-serif-display font-bold text-4xl sm:text-5xl lg:text-[54px] leading-[1.08] tracking-tight text-[#111B07]">
-              Hand-beaded bags, <em className="font-medium text-[#355416]">made in Ibadan.</em>
+            <h1 className="mt-4 font-serif-display font-medium text-[40px] sm:text-5xl lg:text-[56px] leading-[1.06] tracking-[-0.01em] text-[#111B07]">
+              Hand-beaded bags,{' '}
+              <em className="italic text-[#355416]">made in Nigeria.</em>
             </h1>
-            <p className="text-base sm:text-lg text-[#4A5240] leading-relaxed max-w-xl">
-              Sculptural heart bags, pearl carryalls, and fringe clutches beaded by hand at Crafty Cottage. Add ready-to-ship pieces to your bag or submit custom event colours.
+            <p className="mt-5 text-base sm:text-lg text-[#4A5240] leading-relaxed max-w-md">
+              Sculptural heart bags, pearl carryalls and fringe clutches, beaded piece by piece. Shop
+              ready-to-ship, or commission one in your event colours.
             </p>
 
-            <div className="flex flex-wrap items-center gap-3 pt-1">
+            <div className="mt-8 flex flex-col min-[400px]:flex-row min-[400px]:items-center gap-2 min-[400px]:gap-6">
               <a
                 href="#shop"
-                className="min-h-[48px] px-6 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-sm font-bold inline-flex items-center gap-2 transition-colors shadow-sm"
+                className="min-h-[48px] px-7 rounded-xl bg-[#263E0F] hover:bg-[#111B07] active:bg-[#0B1204] text-white text-sm font-semibold tracking-wide inline-flex items-center justify-center transition-colors duration-150"
               >
-                <ShoppingBag className="w-4 h-4 text-[#E6C975]" />
-                <span>Shop the collection</span>
+                Shop the collection
               </a>
               <a
                 href="#custom"
-                className="min-h-[48px] px-6 rounded-xl border border-[#263E0F] text-[#263E0F] hover:bg-[#EAF2DE] text-sm font-bold inline-flex items-center gap-2 transition-colors"
+                className="min-h-[44px] inline-flex items-center justify-center gap-1.5 text-sm font-semibold text-[#263E0F] underline-offset-4 hover:underline"
               >
-                <Palette className="w-4 h-4" />
-                <span>Request custom colours</span>
+                <span>Commission a custom piece</span>
+                <ArrowRight className="w-4 h-4" aria-hidden="true" />
               </a>
             </div>
 
-            <ul className="pt-6 border-t border-[#E2DACA] grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm text-[#4A5240]">
-              <li className="flex items-start gap-2.5">
-                <Sparkles className="w-5 h-5 text-[#355416] shrink-0 mt-0.5" />
-                <span>
-                  <strong className="block text-[#17210E]">Handcrafted</strong>
-                  Each piece beaded by hand
-                </span>
-              </li>
-              <li className="flex items-start gap-2.5">
-                <ShieldCheck className="w-5 h-5 text-[#355416] shrink-0 mt-0.5" />
-                <span>
-                  <strong className="block text-[#17210E]">Direct transfer</strong>
-                  Zero gateway markups at checkout
-                </span>
-              </li>
-              <li className="flex items-start gap-2.5">
-                <ArrowRight className="w-5 h-5 text-[#355416] shrink-0 mt-0.5" />
-                <span>
-                  <strong className="block text-[#17210E]">Nationwide dispatch</strong>
-                  Ibadan pickup, Lagos &amp; beyond
-                </span>
-              </li>
+            <ul className="mt-10 pt-6 border-t border-[#E2DACA] flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] text-[#4A5240]">
+              {['Beaded by hand', 'Pay by bank transfer', 'Delivery across Nigeria'].map((item) => (
+                <li key={item} className="flex items-center gap-2">
+                  <span aria-hidden="true" className="w-1 h-1 rounded-full bg-[#8A6A12]" />
+                  {item}
+                </li>
+              ))}
             </ul>
           </div>
 
-          {/* Mosaic */}
-          <div className="lg:col-span-5 grid grid-cols-2 gap-3 max-w-md mx-auto w-full">
+          {/* Editorial composition: one tall piece, two supporting */}
+          <figure className="lg:col-span-6">
             <a
               href="#shop"
-              className="rounded-2xl overflow-hidden bg-[#E8DEC8] aspect-square block shadow-sm"
+              aria-label="Shop the Prima Collection"
+              className="grid grid-cols-[3fr_2fr] gap-3 sm:gap-4"
             >
-              <img
-                src="/images/products/dupree-gold.jpg"
-                alt="Dupree Midi gold beaded bag"
-                className="w-full h-full object-cover hover:scale-105 transition-transform duration-200"
-              />
+              <span className="block aspect-[4/5] rounded-xl overflow-hidden bg-[#E8DEC8]">
+                <img
+                  src="/images/products/dupree-gold.jpg"
+                  alt="Dupree Midi heart bag in gold beads"
+                  width={600}
+                  height={750}
+                  className="w-full h-full object-cover"
+                />
+              </span>
+              <span className="grid grid-rows-2 gap-3 sm:gap-4">
+                <span className="block rounded-xl overflow-hidden bg-[#E8DEC8]">
+                  <img
+                    src="/images/products/pearly.jpg"
+                    alt="Pearly handbag with oversized faux pearls"
+                    width={400}
+                    height={400}
+                    className="w-full h-full object-cover"
+                  />
+                </span>
+                <span className="block rounded-xl overflow-hidden bg-[#E8DEC8]">
+                  <img
+                    src="/images/products/first-lady.jpg"
+                    alt="First Lady loop-fringe clutch"
+                    width={400}
+                    height={400}
+                    className="w-full h-full object-cover"
+                  />
+                </span>
+              </span>
             </a>
-            <a
-              href="#shop"
-              className="rounded-2xl overflow-hidden bg-[#E8DEC8] aspect-square block mt-5 shadow-sm"
-            >
-              <img
-                src="/images/products/pearly.jpg"
-                alt="Pearly faux-pearl handbag"
-                className="w-full h-full object-cover hover:scale-105 transition-transform duration-200"
-              />
-            </a>
-            <a
-              href="#shop"
-              className="rounded-2xl overflow-hidden bg-[#E8DEC8] aspect-square block -mt-5 shadow-sm"
-            >
-              <img
-                src="/images/products/dupree-purple.jpg"
-                alt="Dupree Midi purple beaded bag"
-                className="w-full h-full object-cover hover:scale-105 transition-transform duration-200"
-              />
-            </a>
-            <a
-              href="#shop"
-              className="rounded-2xl overflow-hidden bg-[#E8DEC8] aspect-square block shadow-sm"
-            >
-              <img
-                src="/images/products/first-lady.jpg"
-                alt="First Lady loop-fringe clutch"
-                className="w-full h-full object-cover hover:scale-105 transition-transform duration-200"
-              />
-            </a>
-            <p className="col-span-2 text-center text-xs font-medium text-[#4A5240] pt-1">
-              Authentic Prima pieces, starting from ₦35,000
-            </p>
-          </div>
+            <figcaption className="mt-3 text-xs text-[#4A5240]">
+              Prima pieces from <span className="font-semibold text-[#17210E]">₦35,000</span>
+            </figcaption>
+          </figure>
         </div>
       </section>
 
       {/* SHOP CATALOG */}
       <section id="shop" className="py-14 sm:py-20">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
-            <div className="space-y-1.5">
-              <p className="text-sm font-bold text-[#355416] uppercase tracking-wider">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-5 mb-6 sm:mb-8">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#355416]">
                 Ready to ship
               </p>
-              <h2 className="font-serif-display text-3xl sm:text-4xl font-bold text-[#111B07]">
-                Shop ready-to-ship pieces
+              <h2 className="mt-3 font-serif-display font-medium text-3xl sm:text-4xl tracking-[-0.01em] text-[#111B07]">
+                The collection
               </h2>
-              <p className="text-sm text-[#4A5240]">
-                Stock counts come straight from our inventory. Add pieces to your bag and pay by bank transfer.
+              <p className="mt-2 text-sm text-[#4A5240] leading-relaxed">
+                Add pieces to your bag and pay by bank transfer at checkout.
               </p>
             </div>
 
-            {/* Search */}
             <div className="relative w-full md:w-72">
-              <Search className="w-4 h-4 text-[#4A5240] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Search
+                aria-hidden="true"
+                className="w-4 h-4 text-[#4A5240] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
+              />
               <label htmlFor="catalog-search" className="sr-only">
                 Search bags and accessories
               </label>
@@ -275,55 +286,54 @@ export function StorefrontClient() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search bags, pearls..."
-                className="w-full min-h-[44px] pl-10 pr-4 rounded-xl bg-white border border-[#E2DACA] text-sm text-[#17210E] placeholder:text-[#5E6654]"
+                className="w-full min-h-[44px] pl-10 pr-4 rounded-xl bg-white border border-[#E2DACA] hover:border-[#C9BEA6] text-sm text-[#17210E] placeholder:text-[#5E6654] transition-colors duration-150"
               />
             </div>
           </div>
 
-          {/* Collection Filter Chips */}
+          {/* Collection filters: one swipeable row on mobile */}
           {collections.length > 1 && (
-            <div className="flex flex-wrap gap-2 mb-8" role="group" aria-label="Filter by collection">
-              {collections.map((col) => {
-                const active = col === selectedCollection
-                return (
-                  <button
-                    key={col}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => setSelectedCollection(col)}
-                    className={`min-h-[44px] px-4 rounded-xl text-sm font-bold transition-colors border ${
-                      active
-                        ? 'bg-[#263E0F] text-white border-[#263E0F]'
-                        : 'bg-white text-[#4A5240] border-[#E2DACA] hover:border-[#263E0F] hover:text-[#263E0F]'
-                    }`}
-                  >
-                    {col}
-                  </button>
-                )
-              })}
+            <div className="-mx-4 px-4 sm:mx-0 sm:px-0 mb-8 overflow-x-auto no-scrollbar">
+              <div className="flex gap-2 w-max" role="group" aria-label="Filter by collection">
+                {collections.map((col) => {
+                  const active = col === selectedCollection
+                  return (
+                    <button
+                      key={col}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setSelectedCollection(col)}
+                      className={`min-h-[44px] px-4 rounded-full whitespace-nowrap text-sm font-medium border transition-colors duration-150 ${
+                        active
+                          ? 'bg-[#17210E] text-white border-[#17210E]'
+                          : 'bg-transparent text-[#4A5240] border-[#E2DACA] hover:border-[#263E0F] hover:text-[#263E0F]'
+                      }`}
+                    >
+                      {col}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           )}
 
-          {/* Product Grid */}
           {catalogueError && !loadingProducts ? (
             <div
               role="alert"
-              className="bg-white rounded-2xl border border-amber-300 py-14 px-6 text-center space-y-3"
+              className="bg-white rounded-2xl border border-amber-300 py-14 px-6 text-center"
             >
-              <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-800 mx-auto flex items-center justify-center">
-                <AlertCircle className="w-6 h-6" />
-              </div>
-              <h3 className="font-serif-display text-xl font-bold text-[#17210E]">
+              <AlertCircle className="w-7 h-7 text-amber-800 mx-auto" aria-hidden="true" />
+              <h3 className="mt-4 font-serif-display text-xl font-medium text-[#17210E]">
                 We couldn&apos;t load the collection
               </h3>
-              <p className="text-sm text-[#4A5240] max-w-md mx-auto">
+              <p className="mt-2 text-sm text-[#4A5240] leading-relaxed max-w-md mx-auto">
                 This is usually a connection problem. Try again, or message us on WhatsApp to order directly.
               </p>
-              <div className="flex flex-wrap justify-center gap-2">
+              <div className="mt-6 flex flex-wrap justify-center gap-2">
                 <button
                   type="button"
                   onClick={() => setReloadKey((k) => k + 1)}
-                  className="min-h-[44px] px-5 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-sm font-bold transition-colors"
+                  className="min-h-[44px] px-5 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-sm font-semibold transition-colors duration-150"
                 >
                   Try again
                 </button>
@@ -331,54 +341,51 @@ export function StorefrontClient() {
                   href={`https://wa.me/${settings.whatsappNumber}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="min-h-[44px] px-5 rounded-xl border border-[#263E0F] text-[#263E0F] hover:bg-[#EAF2DE] text-sm font-bold inline-flex items-center gap-2 transition-colors"
+                  className="min-h-[44px] px-5 rounded-xl border border-[#263E0F] text-[#263E0F] hover:bg-[#EAF2DE] text-sm font-semibold inline-flex items-center gap-2 transition-colors duration-150"
                 >
-                  <MessageCircle className="w-4 h-4" />
+                  <MessageCircle className="w-4 h-4" aria-hidden="true" />
                   <span>Order on WhatsApp</span>
                 </a>
               </div>
             </div>
           ) : loadingProducts ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div
+              className="grid grid-cols-2 lg:grid-cols-4 gap-x-3 gap-y-10 sm:gap-x-6"
+              aria-busy="true"
+              aria-label="Loading the collection"
+            >
               {[1, 2, 3, 4].map((n) => (
-                <div
-                  key={n}
-                  className="bg-white rounded-2xl p-4 border border-[#E2DACA] space-y-3 animate-pulse"
-                >
-                  <div className="aspect-square rounded-xl bg-[#E8DEC8]" />
-                  <div className="h-5 bg-[#E8DEC8] rounded-md w-3/4" />
-                  <div className="h-4 bg-[#F4EFE6] rounded-md w-1/3" />
-                  <div className="h-11 bg-[#E8DEC8] rounded-xl" />
+                <div key={n} className="animate-pulse">
+                  <div className="aspect-[4/5] rounded-xl bg-[#E8DEC8]" />
+                  <div className="mt-4 h-5 bg-[#E8DEC8] rounded-md w-3/4" />
+                  <div className="mt-2 h-4 bg-[#F4EFE6] rounded-md w-1/3" />
+                  <div className="mt-4 h-11 bg-[#F4EFE6] rounded-xl" />
                 </div>
               ))}
             </div>
           ) : products.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-[#E2DACA] py-14 px-6 text-center space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-[#EAF2DE] text-[#263E0F] mx-auto flex items-center justify-center">
-                <Palette className="w-6 h-6" />
-              </div>
-              <h3 className="font-serif-display text-xl font-bold text-[#17210E]">
+            <div className="bg-white rounded-2xl border border-[#E2DACA] py-14 px-6 text-center">
+              <Palette className="w-7 h-7 text-[#263E0F] mx-auto" aria-hidden="true" />
+              <h3 className="mt-4 font-serif-display text-xl font-medium text-[#17210E]">
                 New pieces are being beaded
               </h3>
-              <p className="text-sm text-[#4A5240] max-w-md mx-auto">
+              <p className="mt-2 text-sm text-[#4A5240] leading-relaxed max-w-md mx-auto">
                 Every ready-to-ship bag has found a home. You can still order one made in your colours.
               </p>
               <a
                 href="#custom"
-                className="inline-flex items-center justify-center min-h-[44px] px-5 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-sm font-bold transition-colors"
+                className="mt-6 inline-flex items-center justify-center min-h-[44px] px-5 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-sm font-semibold transition-colors duration-150"
               >
                 Design a custom bag
               </a>
             </div>
           ) : filteredProducts.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-[#E2DACA] py-14 px-6 text-center space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-[#F4EFE6] text-[#4A5240] mx-auto flex items-center justify-center">
-                <PackageX className="w-6 h-6" />
-              </div>
-              <h3 className="font-serif-display text-xl font-bold text-[#17210E]">
+            <div className="bg-white rounded-2xl border border-[#E2DACA] py-14 px-6 text-center">
+              <PackageX className="w-7 h-7 text-[#4A5240] mx-auto" aria-hidden="true" />
+              <h3 className="mt-4 font-serif-display text-xl font-medium text-[#17210E]">
                 No matching pieces found
               </h3>
-              <p className="text-sm text-[#4A5240] max-w-md mx-auto">
+              <p className="mt-2 text-sm text-[#4A5240] leading-relaxed max-w-md mx-auto">
                 Try clearing your search or switching back to all collections.
               </p>
               <button
@@ -387,83 +394,93 @@ export function StorefrontClient() {
                   setSelectedCollection('All')
                   setSearchQuery('')
                 }}
-                className="min-h-[44px] px-5 rounded-xl bg-[#263E0F] text-white text-sm font-bold hover:bg-[#111B07] transition-colors"
+                className="mt-6 min-h-[44px] px-5 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-sm font-semibold transition-colors duration-150"
               >
-                Show all products
+                Show all pieces
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-3 gap-y-10 sm:gap-x-6">
               {filteredProducts.map((product) => {
                 const soldOut = product.stock <= 0
-                const cannotBuy = soldOut
-                const lowStock = product.stock > 0 && product.stock <= 2
+                const withOptions = hasVariants(product)
+                // For options, "only N left" would mislead: N is spread across colours and sizes.
+                const lowStock = !withOptions && product.stock > 0 && product.stock <= 2
+                const range = priceRange(product)
+                const summary = optionsSummary(product)
 
                 return (
-                  <article
-                    key={product.id}
-                    className="bg-white rounded-2xl p-3.5 border border-[#E2DACA] flex flex-col justify-between gap-4 hover:shadow-md transition-shadow"
-                  >
-                    <div className="space-y-3">
-                      <div className="relative aspect-square rounded-xl overflow-hidden bg-[#E8DEC8]">
-                        <img
-                          src={product.imageUrl}
-                          alt={product.name}
-                          className={`w-full h-full object-cover transition-transform duration-200 hover:scale-105 ${
-                            soldOut ? 'opacity-60 grayscale' : ''
-                          }`}
-                        />
-                        {product.tag && (
-                          <span className="absolute top-2.5 left-2.5 bg-[#1A2A0C] text-[#FAF8F4] text-xs font-bold px-2.5 py-1 rounded-md">
-                            {product.tag}
-                          </span>
-                        )}
-                        <span
-                          className={`absolute bottom-2.5 right-2.5 text-xs font-bold px-2.5 py-1 rounded-md ${
-                            soldOut
-                              ? 'bg-[#B42318] text-white'
-                              : lowStock
-                              ? 'bg-[#E6C975] text-[#111B07]'
-                              : 'bg-[#FAF8F4]/95 text-[#263E0F]'
-                          }`}
-                        >
-                          {soldOut
-                            ? 'Sold out'
-                            : lowStock
-                            ? `Only ${product.stock} left`
-                            : `${product.stock} in stock`}
+                  <article key={product.id} className="group flex flex-col">
+                    <div className="relative aspect-[4/5] rounded-xl overflow-hidden bg-[#E8DEC8]">
+                      <img
+                        src={product.imageUrl}
+                        alt={product.name}
+                        width={600}
+                        height={750}
+                        loading="lazy"
+                        className={`w-full h-full object-cover transition-transform duration-200 motion-safe:group-hover:scale-[1.03] ${
+                          soldOut ? 'opacity-60 grayscale' : ''
+                        }`}
+                      />
+                      {product.tag && !soldOut && (
+                        <span className="absolute top-2 left-2 sm:top-3 sm:left-3 max-w-[calc(100%-1rem)] truncate bg-[#FAF8F4]/95 text-[#17210E] text-xs font-medium px-2 py-1 rounded-md">
+                          {product.tag}
                         </span>
-                      </div>
-
-                      <div className="space-y-1">
-                        <h3 className="font-serif-display text-lg font-bold text-[#17210E] leading-snug">
-                          {product.name}
-                        </h3>
-                        <p className="text-base font-extrabold text-[#263E0F] tabular-nums">
-                          {formatNaira(product.price)}
-                        </p>
-                        <p className="text-xs text-[#4A5240] leading-relaxed line-clamp-2">
-                          {product.description}
-                        </p>
-                      </div>
+                      )}
+                      {soldOut && (
+                        <span className="absolute inset-x-0 bottom-0 bg-[#17210E]/85 text-white text-xs font-semibold uppercase tracking-[0.14em] text-center py-2">
+                          Sold out
+                        </span>
+                      )}
                     </div>
 
-                    <button
-                      type="button"
-                      disabled={cannotBuy}
-                      onClick={() => {
-                        addItem(product, 1)
-                        setDrawerOpen(true)
-                      }}
-                      className={`w-full min-h-[44px] px-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors ${
-                        cannotBuy
-                          ? 'bg-[#F4EFE6] text-[#4A5240] border border-[#E2DACA] cursor-not-allowed'
-                          : 'bg-[#263E0F] hover:bg-[#111B07] text-white shadow-xs'
-                      }`}
-                    >
-                      <ShoppingBag className="w-4 h-4 text-[#E6C975]" />
-                      <span>{soldOut ? 'Sold out' : 'Add to bag'}</span>
-                    </button>
+                    <div className="pt-3 sm:pt-4 flex-1 flex flex-col">
+                      <h3 className="font-serif-display text-[17px] sm:text-lg font-medium leading-snug text-[#17210E]">
+                        {product.name}
+                      </h3>
+                      <div className="mt-1 flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
+                        <p className="text-sm sm:text-[15px] font-semibold text-[#263E0F] tabular-nums">
+                          {range.min !== range.max ? `From ${formatNaira(range.min)}` : formatNaira(range.min)}
+                        </p>
+                        {lowStock && (
+                          <p className="text-xs font-medium text-[#8A6A12]">Only {product.stock} left</p>
+                        )}
+                      </div>
+                      {summary && <p className="mt-1 text-xs text-[#4A5240]">{summary}</p>}
+                      <p className="hidden sm:block mt-2 text-[13px] text-[#4A5240] leading-relaxed line-clamp-2">
+                        {product.description}
+                      </p>
+
+                      <div className="mt-auto pt-3 sm:pt-4">
+                        <button
+                          type="button"
+                          disabled={soldOut}
+                          aria-label={
+                            soldOut
+                              ? `${product.name} is sold out`
+                              : withOptions
+                              ? `Choose options for ${product.name}`
+                              : `Add ${product.name} to bag`
+                          }
+                          aria-haspopup={withOptions ? 'dialog' : undefined}
+                          onClick={() => {
+                            if (withOptions) {
+                              setOptionsFor(product)
+                              return
+                            }
+                            addItem(product, 1)
+                            setDrawerOpen(true)
+                          }}
+                          className={`w-full min-h-[44px] px-3 rounded-xl border text-sm font-semibold transition-colors duration-150 ${
+                            soldOut
+                              ? 'bg-[#F4EFE6] text-[#5E6654] border-[#E2DACA] cursor-not-allowed'
+                              : 'border-[#263E0F] text-[#263E0F] hover:bg-[#263E0F] hover:text-white active:bg-[#111B07] active:text-white'
+                          }`}
+                        >
+                          {soldOut ? 'Sold out' : withOptions ? 'Choose options' : 'Add to bag'}
+                        </button>
+                      </div>
+                    </div>
                   </article>
                 )
               })}
@@ -472,32 +489,32 @@ export function StorefrontClient() {
         </div>
       </section>
 
-      {/* BESPOKE CUSTOM COLOUR STUDIO */}
-      <section id="custom" className="py-16 sm:py-20 bg-[#1A2A0C] text-[#F4EFE6]">
+      {/* MADE TO ORDER */}
+      <section id="custom" className="py-16 sm:py-24 bg-[#1A2A0C] text-[#F4EFE6]">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
-          <div className="max-w-2xl mb-10 space-y-2">
-            <p className="text-sm font-bold text-[#E6C975] uppercase tracking-wider">
+          <div className="max-w-2xl mb-10 sm:mb-12">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#E6C975]">
               Made to order
             </p>
-            <h2 className="font-serif-display text-3xl sm:text-4xl font-bold text-white">
-              Design a bag in your colours
+            <h2 className="mt-3 font-serif-display font-medium text-3xl sm:text-4xl tracking-[-0.01em] text-white">
+              A bag in your colours
             </h2>
-            <p className="text-sm sm:text-base text-[#CFC6B2]">
-              Planning a wedding, aso-ebi, or milestone celebration? Pick your silhouette and bead finish, and send your custom spec straight to Crafty Cottage.
+            <p className="mt-3 text-sm sm:text-base text-[#CFC6B2] leading-relaxed">
+              Planning a wedding, aso-ebi or milestone celebration? Choose a silhouette and bead finish, and
+              we&apos;ll confirm the shade and timeline with you directly.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            <form onSubmit={handleBespokeSubmit} className="lg:col-span-7 space-y-7" noValidate>
-              {/* Step 1 */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-start">
+            <form onSubmit={handleBespokeSubmit} className="lg:col-span-7 space-y-9" noValidate>
               <fieldset>
-                <legend className="text-sm font-bold flex items-center gap-2.5 mb-3">
-                  <span className="w-7 h-7 rounded-md bg-[#E6C975] text-[#111B07] font-extrabold grid place-items-center">
-                    1
+                <legend className="mb-4 flex items-baseline gap-3">
+                  <span className="font-serif-display italic text-lg text-[#E6C975]" aria-hidden="true">
+                    01
                   </span>
-                  <span>Choose a shape</span>
+                  <span className="text-sm font-semibold tracking-wide text-white">Choose a shape</span>
                 </legend>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-2 gap-2.5">
                   {BESPOKE_SHAPES.map((s) => {
                     const checked = s.id === shapeId
                     return (
@@ -506,34 +523,29 @@ export function StorefrontClient() {
                         type="button"
                         aria-pressed={checked}
                         onClick={() => setShapeId(s.id)}
-                        className={`min-h-[56px] p-3 rounded-xl border text-left flex items-center justify-between transition-colors ${
-                          checked
-                            ? 'bg-[#2A3E14] border-[#E6C975] ring-1 ring-[#E6C975]'
-                            : 'bg-[#111B07] border-[#7E9364] hover:border-[#E6C975]'
-                        }`}
+                        className={`${optionBase} justify-between ${optionState(checked)}`}
                       >
-                        <span>
-                          <span className="block text-sm font-bold text-white">{s.name}</span>
-                          <span className="block text-xs text-[#CFC6B2]">
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold text-white leading-snug">{s.name}</span>
+                          <span className="block text-xs text-[#CFC6B2] tabular-nums mt-0.5">
                             From {formatNaira(s.price)}
                           </span>
                         </span>
-                        {checked && <Check className="w-4 h-4 text-[#E6C975]" />}
+                        {checked && <Check className="w-4 h-4 text-[#E6C975] shrink-0" aria-hidden="true" />}
                       </button>
                     )
                   })}
                 </div>
               </fieldset>
 
-              {/* Step 2 */}
               <fieldset>
-                <legend className="text-sm font-bold flex items-center gap-2.5 mb-3">
-                  <span className="w-7 h-7 rounded-md bg-[#E6C975] text-[#111B07] font-extrabold grid place-items-center">
-                    2
+                <legend className="mb-4 flex items-baseline gap-3">
+                  <span className="font-serif-display italic text-lg text-[#E6C975]" aria-hidden="true">
+                    02
                   </span>
-                  <span>Choose a bead colour</span>
+                  <span className="text-sm font-semibold tracking-wide text-white">Choose a bead finish</span>
                 </legend>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-2.5">
                   {BESPOKE_BEADS.map((b) => {
                     const checked = b.id === beadId
                     return (
@@ -542,42 +554,37 @@ export function StorefrontClient() {
                         type="button"
                         aria-pressed={checked}
                         onClick={() => setBeadId(b.id)}
-                        className={`min-h-[56px] p-3 rounded-xl border text-left flex items-center gap-3 transition-colors ${
-                          checked
-                            ? 'bg-[#2A3E14] border-[#E6C975] ring-1 ring-[#E6C975]'
-                            : 'bg-[#111B07] border-[#7E9364] hover:border-[#E6C975]'
-                        }`}
+                        className={`${optionBase} ${optionState(checked)}`}
                       >
                         <span
                           aria-hidden="true"
                           className="w-6 h-6 rounded-full border border-white/40 shrink-0"
                           style={{ background: b.swatch }}
                         />
-                        <span className="flex-1">
-                          <span className="block text-sm font-bold text-white">{b.name}</span>
-                          <span className="block text-xs text-[#CFC6B2]">
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-sm font-semibold text-white leading-snug">{b.name}</span>
+                          <span className="block text-xs text-[#CFC6B2] tabular-nums mt-0.5">
                             {b.extra > 0 ? `+${formatNaira(b.extra)}` : 'No extra cost'}
                           </span>
                         </span>
-                        {checked && <Check className="w-4 h-4 text-[#E6C975]" />}
+                        {checked && <Check className="w-4 h-4 text-[#E6C975] shrink-0" aria-hidden="true" />}
                       </button>
                     )
                   })}
                 </div>
               </fieldset>
 
-              {/* Step 3 */}
-              <div className="space-y-4">
-                <div className="text-sm font-bold flex items-center gap-2.5">
-                  <span className="w-7 h-7 rounded-md bg-[#E6C975] text-[#111B07] font-extrabold grid place-items-center">
-                    3
+              <fieldset className="space-y-4">
+                <legend className="mb-4 flex items-baseline gap-3">
+                  <span className="font-serif-display italic text-lg text-[#E6C975]" aria-hidden="true">
+                    03
                   </span>
-                  <span>Your contact details &amp; event notes</span>
-                </div>
+                  <span className="text-sm font-semibold tracking-wide text-white">Your details</span>
+                </legend>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label htmlFor="bespoke-name" className="block text-xs font-semibold text-[#CFC6B2] mb-1">
+                    <label htmlFor="bespoke-name" className="block text-xs font-medium text-[#CFC6B2] mb-1.5">
                       Full name *
                     </label>
                     <input
@@ -593,19 +600,19 @@ export function StorefrontClient() {
                       aria-invalid={Boolean(fieldErrors.name)}
                       aria-describedby={fieldErrors.name ? 'bespoke-name-error' : undefined}
                       placeholder="e.g. Tolu Adeyemi"
-                      className={`w-full min-h-[44px] px-3.5 rounded-xl bg-[#111B07] border text-sm text-white placeholder:text-[#A9B39A] ${
+                      className={`w-full min-h-[44px] px-3.5 rounded-xl bg-[#111B07] border text-base sm:text-sm text-white placeholder:text-[#A9B39A] ${
                         fieldErrors.name ? 'border-[#FCA5A5]' : 'border-[#7E9364]'
                       }`}
                     />
                     {fieldErrors.name && (
-                      <p id="bespoke-name-error" className="mt-1 flex items-center gap-1.5 text-xs text-[#FCA5A5]">
-                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      <p id="bespoke-name-error" className="mt-1.5 flex items-center gap-1.5 text-xs text-[#FCA5A5]">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                         {fieldErrors.name}
                       </p>
                     )}
                   </div>
                   <div>
-                    <label htmlFor="bespoke-phone" className="block text-xs font-semibold text-[#CFC6B2] mb-1">
+                    <label htmlFor="bespoke-phone" className="block text-xs font-medium text-[#CFC6B2] mb-1.5">
                       Phone or WhatsApp number *
                     </label>
                     <input
@@ -620,14 +627,14 @@ export function StorefrontClient() {
                       onBlur={() => customerPhone && setFieldErrors((f) => ({ ...f, phone: validatePhone(customerPhone) }))}
                       aria-invalid={Boolean(fieldErrors.phone)}
                       aria-describedby={fieldErrors.phone ? 'bespoke-phone-error' : undefined}
-                      placeholder="e.g. 0803 000 0000"
-                      className={`w-full min-h-[44px] px-3.5 rounded-xl bg-[#111B07] border text-sm text-white placeholder:text-[#A9B39A] ${
+                      placeholder="e.g. 0803 000 0000 or +44 7700 900123"
+                      className={`w-full min-h-[44px] px-3.5 rounded-xl bg-[#111B07] border text-base sm:text-sm text-white placeholder:text-[#A9B39A] ${
                         fieldErrors.phone ? 'border-[#FCA5A5]' : 'border-[#7E9364]'
                       }`}
                     />
                     {fieldErrors.phone && (
-                      <p id="bespoke-phone-error" className="mt-1 flex items-center gap-1.5 text-xs text-[#FCA5A5]">
-                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      <p id="bespoke-phone-error" className="mt-1.5 flex items-center gap-1.5 text-xs text-[#FCA5A5]">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                         {fieldErrors.phone}
                       </p>
                     )}
@@ -635,7 +642,7 @@ export function StorefrontClient() {
                 </div>
 
                 <div>
-                  <label htmlFor="bespoke-notes" className="block text-xs font-semibold text-[#CFC6B2] mb-1">
+                  <label htmlFor="bespoke-notes" className="block text-xs font-medium text-[#CFC6B2] mb-1.5">
                     Event date and colour notes (optional)
                   </label>
                   <textarea
@@ -644,128 +651,153 @@ export function StorefrontClient() {
                     maxLength={400}
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    placeholder="e.g. Wedding on 14 December, prefer silver chain strap..."
-                    className="w-full p-3.5 rounded-xl bg-[#111B07] border border-[#7E9364] text-sm text-white placeholder:text-[#A9B39A]"
+                    placeholder="e.g. Wedding on 14 December, prefer a silver chain strap"
+                    className="w-full p-3.5 rounded-xl bg-[#111B07] border border-[#7E9364] text-base sm:text-sm text-white placeholder:text-[#A9B39A] leading-relaxed"
                   />
                 </div>
+              </fieldset>
+
+              {/* Mobile and tablet: the estimate sits right above the action it informs */}
+              <div className="lg:hidden flex items-baseline justify-between gap-4 pt-5 border-t border-[#3A5222]">
+                <span className="text-sm text-[#CFC6B2]">
+                  {selectedShape.name}, {selectedBead.name}
+                </span>
+                <span className="font-serif-display text-2xl text-[#E6C975] tabular-nums shrink-0">
+                  {formatNaira(bespokeTotal)}
+                </span>
               </div>
 
               {bespokeError && (
-                <p role="alert" className="text-sm text-red-300 bg-red-950/60 border border-red-400/40 px-4 py-2.5 rounded-xl">
+                <p
+                  role="alert"
+                  className="flex items-start gap-2 text-sm text-red-200 bg-red-950/60 border border-red-400/40 px-4 py-3 rounded-xl"
+                >
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
                   {bespokeError}
                 </p>
               )}
 
               {bespokeSubmitted ? (
-                <div role="status" className="bg-[#263E0F] border border-[#E6C975]/60 p-4 rounded-xl text-sm text-[#FAF8F4] space-y-3">
-                  <div className="space-y-1">
-                    <p className="font-bold text-[#E6C975]">Request received by Crafty Cottage</p>
-                    <p>Crafty Cottage has your {selectedShape.name} in {selectedBead.name} spec and will contact you on {customerPhone}.</p>
-                  </div>
+                <div role="status" className="bg-[#263E0F] border border-[#E6C975]/60 p-5 rounded-xl text-sm text-[#FAF8F4]">
+                  <p className="font-semibold text-[#E6C975]">Request received</p>
+                  <p className="mt-1 leading-relaxed">
+                    We have your {selectedShape.name} in {selectedBead.name} and will contact you on{' '}
+                    {customerPhone}.
+                  </p>
                   <button
                     type="button"
                     onClick={() => {
                       setBespokeSubmitted(false)
                       setNotes('')
                     }}
-                    className="min-h-[44px] px-4 rounded-xl border border-[#E6C975]/60 text-[#FAF8F4] hover:bg-[#1A2A0C] text-xs font-bold transition-colors"
+                    className="mt-4 min-h-[44px] px-4 rounded-xl border border-[#E6C975]/60 text-[#FAF8F4] hover:bg-[#1A2A0C] text-sm font-semibold transition-colors duration-150"
                   >
                     Design another bag
                   </button>
                 </div>
               ) : (
-              <button
-                type="submit"
-                disabled={bespokeSubmitting}
-                className="w-full sm:w-auto min-h-[48px] px-7 rounded-xl bg-[#E6C975] hover:bg-[#F1DA9A] text-[#111B07] text-sm font-extrabold inline-flex items-center justify-center gap-2 transition-colors disabled:opacity-60"
-              >
-                {bespokeSubmitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Sending request...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4" />
-                    <span>Send custom bag request</span>
-                  </>
-                )}
-              </button>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-6">
+                  <button
+                    type="submit"
+                    disabled={bespokeSubmitting}
+                    className="w-full sm:w-auto min-h-[48px] px-7 rounded-xl bg-[#E6C975] hover:bg-[#F1DA9A] active:bg-[#D9B95C] text-[#111B07] text-sm font-semibold tracking-wide inline-flex items-center justify-center gap-2 transition-colors duration-150 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {bespokeSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                        <span>Sending request...</span>
+                      </>
+                    ) : (
+                      <span>Send custom request</span>
+                    )}
+                  </button>
+                  <a
+                    href={whatsappSpecUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="lg:hidden min-h-[44px] inline-flex items-center justify-center gap-2 text-sm font-semibold text-[#FAF8F4] underline-offset-4 hover:underline"
+                  >
+                    <MessageCircle className="w-4 h-4 text-[#B8F0CF]" aria-hidden="true" />
+                    <span>Or chat on WhatsApp</span>
+                  </a>
+                </div>
               )}
             </form>
 
-            {/* Summary Card */}
-            <aside className="lg:col-span-5 bg-[#111B07] border border-[#3A5222] rounded-2xl p-6 space-y-5 lg:sticky lg:top-24">
-              <div className="flex items-baseline justify-between border-b border-[#3A5222] pb-4">
-                <h3 className="text-lg font-extrabold text-white">Your custom spec</h3>
-                <span className="text-xs text-[#CFC6B2]">Made to order</span>
-              </div>
+            {/* Desktop summary */}
+            <aside className="hidden lg:block lg:col-span-5 bg-[#111B07] border border-[#3A5222] rounded-2xl p-7 lg:sticky lg:top-24">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#CFC6B2]">Your piece</p>
 
-              <dl className="space-y-3 text-sm">
+              <dl className="mt-5 space-y-4">
                 <div>
-                  <dt className="text-xs text-[#CFC6B2]">Bag silhouette</dt>
-                  <dd className="font-serif-display text-lg font-bold text-white">
-                    {selectedShape.name}
-                  </dd>
+                  <dt className="text-xs text-[#CFC6B2]">Silhouette</dt>
+                  <dd className="mt-0.5 font-serif-display text-xl text-white">{selectedShape.name}</dd>
                 </div>
                 <div>
                   <dt className="text-xs text-[#CFC6B2]">Bead finish</dt>
-                  <dd className="font-serif-display text-lg font-bold text-white">
-                    {selectedBead.name}
-                  </dd>
+                  <dd className="mt-0.5 font-serif-display text-xl text-white">{selectedBead.name}</dd>
                 </div>
               </dl>
 
-              <div className="pt-4 border-t border-[#3A5222]">
-                <span className="text-xs text-[#CFC6B2] block">Estimated production price</span>
-                <span className="text-3xl font-extrabold text-[#E6C975] tabular-nums block mt-1">
+              <div className="mt-6 pt-6 border-t border-[#3A5222]">
+                <span className="text-xs text-[#CFC6B2] block">Estimated price</span>
+                <span className="mt-1 block font-serif-display text-4xl text-[#E6C975] tabular-nums">
                   {formatNaira(bespokeTotal)}
                 </span>
-                <p className="text-xs text-[#CFC6B2] mt-1">
-                  Final timeline and custom shade confirmation shared once we review your request.
+                <p className="mt-2 text-xs text-[#CFC6B2] leading-relaxed">
+                  We confirm the final shade and timeline once we review your request.
                 </p>
               </div>
 
               <a
-                href={`https://wa.me/${settings.whatsappNumber}?text=${encodeURIComponent(
-                  `Hello Crafty Cottage, I'd like to discuss a custom ${selectedShape.name} in ${selectedBead.name} (Est. ${formatNaira(bespokeTotal)}). ${notes}`
-                )}`}
+                href={whatsappSpecUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full min-h-[44px] px-4 rounded-xl border border-[#3A5222] hover:border-[#E6C975] text-sm font-bold text-[#FAF8F4] flex items-center justify-center gap-2 transition-colors"
+                className="mt-6 w-full min-h-[44px] px-4 rounded-xl border border-[#3A5222] hover:border-[#E6C975] text-sm font-semibold text-[#FAF8F4] flex items-center justify-center gap-2 transition-colors duration-150"
               >
-                <MessageCircle className="w-4 h-4 text-[#B8F0CF]" />
-                <span>Chat directly on WhatsApp</span>
+                <MessageCircle className="w-4 h-4 text-[#B8F0CF]" aria-hidden="true" />
+                <span>Chat on WhatsApp</span>
               </a>
             </aside>
           </div>
         </div>
       </section>
 
-      {/* STORY & CONTACT */}
-      <section className="py-16 bg-[#F4EFE6] border-t border-[#E2DACA]">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
-          <div className="lg:col-span-7 space-y-4">
-            <blockquote className="font-serif-display italic text-2xl sm:text-3xl leading-snug text-[#111B07]">
-              “Crafty Cottage is a bead haven where creativity meets simplicity. We source beads that are skin-friendly and fabric-friendly, so every piece helps you stand out.”
-            </blockquote>
-            <p className="text-sm font-bold text-[#4A5240]">Crafty Cottage</p>
-          </div>
+      <ProductOptionsDialog
+        product={optionsFor}
+        onClose={() => setOptionsFor(null)}
+        onAdd={(product, variant) => {
+          addItem(product, 1, variant)
+          setOptionsFor(null)
+          setDrawerOpen(true)
+        }}
+      />
 
-          <ul className="lg:col-span-5 divide-y divide-[#E2DACA]">
+      {/* STORY & CONTACT */}
+      <section className="py-16 sm:py-24 bg-[#F4EFE6]">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-center">
+          <figure className="lg:col-span-7">
+            <blockquote className="font-serif-display italic text-2xl sm:text-[32px] leading-snug text-[#111B07]">
+              “A bead haven where creativity meets simplicity. We source beads that are skin-friendly and
+              fabric-friendly, so every piece helps you stand out.”
+            </blockquote>
+            <figcaption className="mt-5 text-xs font-semibold uppercase tracking-[0.18em] text-[#4A5240]">
+              Crafty Cottage · Handmade in Nigeria
+            </figcaption>
+          </figure>
+
+          <ul className="lg:col-span-5 divide-y divide-[#E2DACA] border-y border-[#E2DACA]">
             <li>
               <a
                 href={`tel:+${settings.whatsappNumber}`}
-                className="min-h-[56px] py-3 flex items-center gap-3.5 hover:underline"
+                className="group min-h-[64px] py-3 flex items-center gap-4"
               >
-                <span className="w-10 h-10 rounded-xl bg-white border border-[#E2DACA] text-[#263E0F] grid place-items-center shrink-0">
-                  <Phone className="w-4 h-4" />
-                </span>
-                <span>
+                <Phone className="w-5 h-5 text-[#263E0F] shrink-0" aria-hidden="true" />
+                <span className="flex-1">
                   <span className="block text-xs text-[#4A5240]">Call or WhatsApp</span>
-                  <strong className="text-sm text-[#17210E] tabular-nums">
+                  <span className="block text-sm font-semibold text-[#17210E] tabular-nums group-hover:underline underline-offset-4">
                     {formatNigerianPhone(settings.whatsappNumber)}
-                  </strong>
+                  </span>
                 </span>
               </a>
             </li>
@@ -774,24 +806,26 @@ export function StorefrontClient() {
                 href={instagramUrl(settings.instagramHandle)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="min-h-[56px] py-3 flex items-center gap-3.5 hover:underline"
+                className="group min-h-[64px] py-3 flex items-center gap-4"
               >
-                <span className="w-10 h-10 rounded-xl bg-white border border-[#E2DACA] text-[#263E0F] grid place-items-center shrink-0">
-                  <Camera className="w-4 h-4" />
-                </span>
-                <span>
+                <Camera className="w-5 h-5 text-[#263E0F] shrink-0" aria-hidden="true" />
+                <span className="flex-1">
                   <span className="block text-xs text-[#4A5240]">Instagram</span>
-                  <strong className="text-sm text-[#17210E]">{settings.instagramHandle}</strong>
+                  <span className="block text-sm font-semibold text-[#17210E] group-hover:underline underline-offset-4">
+                    {settings.instagramHandle}
+                  </span>
                 </span>
               </a>
             </li>
-            <li className="pt-3">
-              <Link
-                href="/track"
-                className="text-sm font-bold text-[#263E0F] hover:underline inline-flex items-center gap-1.5"
-              >
-                <span>Already ordered? Track your bag status</span>
-                <ArrowRight className="w-4 h-4" />
+            <li>
+              <Link href="/track" className="group min-h-[64px] py-3 flex items-center gap-4">
+                <ArrowRight className="w-5 h-5 text-[#263E0F] shrink-0" aria-hidden="true" />
+                <span className="flex-1">
+                  <span className="block text-xs text-[#4A5240]">Already ordered?</span>
+                  <span className="block text-sm font-semibold text-[#17210E] group-hover:underline underline-offset-4">
+                    Track your order
+                  </span>
+                </span>
               </Link>
             </li>
           </ul>

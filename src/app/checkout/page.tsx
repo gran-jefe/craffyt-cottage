@@ -18,7 +18,7 @@ import {
 } from 'lucide-react'
 import { SiteHeader } from '@/components/SiteHeader'
 import { SiteFooter } from '@/components/SiteFooter'
-import { useCart } from '@/context/CartContext'
+import { cartLineKey, useCart } from '@/context/CartContext'
 import { DEFAULT_STORE_SETTINGS, formatNaira, hasPaymentDetails } from '@/lib/defaults'
 import {
   RECEIPT_PDF_MAX_BYTES,
@@ -31,6 +31,7 @@ import {
   uploadMediaFile,
 } from '@/lib/storeService'
 import type { Order, StoreSettings } from '@/types/store'
+import { parsePhone } from '@/lib/phone'
 
 export default function CheckoutPage() {
   const { items, subtotal, clearCart, showToast, reconcileWithProducts } = useCart()
@@ -160,8 +161,8 @@ export default function CheckoutPage() {
   function validateForm(): boolean {
     const next: Record<string, string> = {}
     if (customerName.trim().length < 2) next.customerName = 'Please enter your full name.'
-    if (customerPhone.trim().length < 7)
-      next.customerPhone = 'Please enter a valid Nigerian phone or WhatsApp number.'
+    const phone = parsePhone(customerPhone)
+    if (!phone.ok) next.customerPhone = phone.error
     if (
       customerEmail.trim() &&
       !/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(customerEmail.trim())
@@ -206,14 +207,20 @@ export default function CheckoutPage() {
       const receiptUrl = await uploadMediaFile(receiptFile, 'receipts')
       const created = await createOrder({
         customerName,
-        customerPhone,
+        // Validated in validateForm; stored in one international format for WhatsApp links.
+        customerPhone: (() => {
+          const phone = parsePhone(customerPhone)
+          return phone.ok ? phone.e164 : customerPhone.trim()
+        })(),
         customerEmail,
         deliveryZone: selectedZone ? selectedZone.label : 'Standard delivery',
         deliveryFee,
         address,
         notes,
+        // Optional keys are only written when set: Firestore rejects undefined values.
         items: items.map((i) => ({
           productId: i.productId,
+          ...(i.variantId ? { variantId: i.variantId, variantLabel: i.variantLabel || '' } : {}),
           name: i.name,
           price: i.price,
           quantity: i.quantity,
@@ -408,12 +415,17 @@ export default function CheckoutPage() {
                           clearError('customerPhone')
                         }}
                         aria-invalid={fieldA11y('customerPhone')['aria-invalid']}
-                        aria-describedby={fieldA11y('customerPhone')['aria-describedby']}
-                          placeholder="e.g. 0803 123 4567"
+                        aria-describedby={errors.customerPhone ? 'customerPhone-error' : 'customerPhone-hint'}
+                          inputMode="tel"
+                          placeholder="e.g. 0803 123 4567 or +44 7700 900123"
                           className={`w-full min-h-[44px] px-3.5 rounded-xl border ${fieldA11y('customerPhone').borderClass} bg-[#FAF8F4] text-sm`}
                         />
-                        {errors.customerPhone && (
-                        <p id="customerPhone-error" className="text-xs text-[#B42318] mt-1">{errors.customerPhone}</p>
+                        {errors.customerPhone ? (
+                        <p id="customerPhone-error" className="text-xs text-[#B42318] mt-1 leading-relaxed">{errors.customerPhone}</p>
+                        ) : (
+                        <p id="customerPhone-hint" className="text-xs text-[#4A5240] mt-1 leading-relaxed">
+                          Outside Nigeria? Start with + and your country code.
+                        </p>
                         )}
                       </div>
                     </div>
@@ -476,7 +488,7 @@ export default function CheckoutPage() {
                         }}
                         aria-invalid={fieldA11y('address')['aria-invalid']}
                         aria-describedby={fieldA11y('address')['aria-describedby']}
-                        placeholder="e.g. Queen Idia Hall, University of Ibadan / 14 Admiralty Way, Lekki Phase 1"
+                        placeholder="e.g. 14 Admiralty Way, Lekki Phase 1, Lagos"
                         className={`w-full p-3.5 rounded-xl border ${fieldA11y('address').borderClass} bg-[#FAF8F4] text-sm`}
                       />
                       {errors.address && (
@@ -664,7 +676,7 @@ export default function CheckoutPage() {
 
                   <ul className="space-y-3 divide-y divide-[#F4EFE6]">
                     {items.map((item) => (
-                      <li key={item.productId} className="pt-3 first:pt-0 flex items-center justify-between gap-3 text-sm">
+                      <li key={cartLineKey(item)} className="pt-3 first:pt-0 flex items-center justify-between gap-3 text-sm">
                         <div className="flex items-center gap-3 min-w-0">
                           <img
                             src={item.imageUrl}
@@ -673,7 +685,9 @@ export default function CheckoutPage() {
                           />
                           <div className="min-w-0">
                             <p className="font-bold text-[#17210E] truncate">{item.name}</p>
-                            <p className="text-xs text-[#4A5240]">Qty: {item.quantity}</p>
+                            <p className="text-xs text-[#4A5240]">
+                              {item.variantLabel ? `${item.variantLabel} · ` : ''}Qty: {item.quantity}
+                            </p>
                           </div>
                         </div>
                         <span className="font-bold text-[#17210E] tabular-nums shrink-0">

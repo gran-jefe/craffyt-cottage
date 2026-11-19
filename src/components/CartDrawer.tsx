@@ -3,7 +3,7 @@
 import React, { useEffect } from 'react'
 import Link from 'next/link'
 import { X, ShoppingBag, Plus, Minus, Trash2, ArrowRight } from 'lucide-react'
-import { useCart } from '@/context/CartContext'
+import { cartLineKey, useCart } from '@/context/CartContext'
 import { formatNaira } from '@/lib/defaults'
 import { useDialogFocus } from '@/lib/useDialogFocus'
 
@@ -87,7 +87,7 @@ export function CartDrawer() {
           ) : (
             items.map((item) => (
               <div
-                key={item.productId}
+                key={cartLineKey(item)}
                 className="bg-white rounded-2xl p-3.5 border border-[#E2DACA] flex gap-3.5 items-center"
               >
                 <img
@@ -99,14 +99,17 @@ export function CartDrawer() {
                   <h3 className="font-serif-display text-base font-bold text-[#17210E] truncate">
                     {item.name}
                   </h3>
+                  {item.variantLabel && (
+                    <p className="text-xs text-[#4A5240]">{item.variantLabel}</p>
+                  )}
                   <p className="text-sm font-bold text-[#263E0F]">
                     {formatNaira(item.price)}
                   </p>
                   <div className="flex items-center gap-2 pt-1">
                     <button
                       type="button"
-                      onClick={() => updateQuantity(item.productId, item.quantity - 1)}
-                      aria-label={`Decrease quantity of ${item.name}`}
+                      onClick={() => updateQuantity(cartLineKey(item), item.quantity - 1)}
+                      aria-label={`Decrease quantity of ${item.name}${item.variantLabel ? ` (${item.variantLabel})` : ''}`}
                       className="min-w-[44px] min-h-[44px] rounded-lg border border-[#E2DACA] bg-[#FAF8F4] hover:bg-[#F4EFE6] flex items-center justify-center"
                     >
                       <Minus className="w-3.5 h-3.5" />
@@ -116,17 +119,17 @@ export function CartDrawer() {
                     </span>
                     <button
                       type="button"
-                      onClick={() => updateQuantity(item.productId, item.quantity + 1)}
+                      onClick={() => updateQuantity(cartLineKey(item), item.quantity + 1)}
                       disabled={item.quantity >= item.maxStock}
-                      aria-label={`Increase quantity of ${item.name}`}
+                      aria-label={`Increase quantity of ${item.name}${item.variantLabel ? ` (${item.variantLabel})` : ''}`}
                       className="min-w-[44px] min-h-[44px] rounded-lg border border-[#E2DACA] bg-[#FAF8F4] hover:bg-[#F4EFE6] disabled:opacity-40 flex items-center justify-center"
                     >
                       <Plus className="w-3.5 h-3.5" />
                     </button>
                     <button
                       type="button"
-                      onClick={() => removeItem(item.productId)}
-                      aria-label={`Remove ${item.name}`}
+                      onClick={() => removeItem(cartLineKey(item))}
+                      aria-label={`Remove ${item.name}${item.variantLabel ? ` (${item.variantLabel})` : ''}`}
                       className="ml-auto min-w-[44px] min-h-[44px] rounded-lg text-[#4A5240] hover:text-[#B42318] hover:bg-red-50 flex items-center justify-center"
                     >
                       <Trash2 className="w-4 h-4" />

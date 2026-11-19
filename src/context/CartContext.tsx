@@ -1,8 +1,9 @@
 'use client'
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
-import type { CartItem, Product } from '@/types/store'
+import type { CartItem, Product, ProductVariant } from '@/types/store'
 import { formatNaira } from '@/lib/defaults'
+import { findVariant, hasVariants, lineKey, variantLabel, variantPrice } from '@/lib/variants'
 import { CheckCircle2, AlertCircle } from 'lucide-react'
 
 const CART_STORAGE_KEY = 'craftycottage_cart_v1'
@@ -17,9 +18,11 @@ interface CartContextValue {
   items: CartItem[]
   isDrawerOpen: boolean
   setDrawerOpen: (open: boolean) => void
-  addItem: (product: Product, qty?: number) => void
-  updateQuantity: (productId: string, qty: number) => void
-  removeItem: (productId: string) => void
+  /** Products with colour/size options must be added with the chosen variant. */
+  addItem: (product: Product, qty?: number, variant?: ProductVariant) => void
+  /** `key` is cartLineKey(item): one line per product option. */
+  updateQuantity: (key: string, qty: number) => void
+  removeItem: (key: string) => void
   clearCart: () => void
   subtotal: number
   totalCount: number
@@ -29,6 +32,10 @@ interface CartContextValue {
 }
 
 const CartContext = createContext<CartContextValue | null>(null)
+
+export function cartLineKey(item: Pick<CartItem, 'productId' | 'variantId'>): string {
+  return lineKey(item.productId, item.variantId)
+}
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([])
@@ -77,65 +84,67 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, [items, hydrated])
 
   const addItem = useCallback(
-    (product: Product, qty = 1) => {
-      if (product.stock <= 0) {
-        showToast(`${product.name} is currently sold out.`, 'error')
+    (product: Product, qty = 1, variant?: ProductVariant) => {
+      if (hasVariants(product) && !variant) {
+        showToast(`Choose a colour or size for ${product.name} first.`, 'error')
         return
       }
+      const label = variant ? variantLabel(variant) : ''
+      const displayName = label ? `${product.name} (${label})` : product.name
+      const stock = variant ? variant.stock : product.stock
+      if (stock <= 0) {
+        showToast(`${displayName} is currently sold out.`, 'error')
+        return
+      }
+      const key = lineKey(product.id, variant?.id)
       // Decide the outcome from the current bag, then update state; toasts stay outside the
       // state updater because React may run updaters twice.
-      const existing = items.find((i) => i.productId === product.id)
+      const existing = items.find((i) => cartLineKey(i) === key)
       if (existing) {
-        const nextQty = Math.min(product.stock, existing.quantity + qty)
+        const nextQty = Math.min(stock, existing.quantity + qty)
         if (nextQty === existing.quantity) {
           showToast(
-            `Only ${product.stock} ${product.stock === 1 ? 'piece' : 'pieces'} left, and they're all in your bag.`,
+            `Only ${stock} ${stock === 1 ? 'piece' : 'pieces'} left, and they're all in your bag.`,
             'error'
           )
           return
         }
         setItems((prev) =>
-          prev.map((i) =>
-            i.productId === product.id ? { ...i, quantity: nextQty, maxStock: product.stock } : i
-          )
+          prev.map((i) => (cartLineKey(i) === key ? { ...i, quantity: nextQty, maxStock: stock } : i))
         )
-        showToast(`Added another ${product.name} to your bag.`)
+        showToast(`Added another ${displayName} to your bag.`)
         return
       }
-      setItems((prev) =>
-        prev.some((i) => i.productId === product.id)
-          ? prev
-          : [
-              ...prev,
-              {
-                productId: product.id,
-                name: product.name,
-                price: product.price,
-                imageUrl: product.imageUrl,
-                quantity: Math.min(qty, product.stock),
-                maxStock: product.stock,
-              },
-            ]
-      )
-      showToast(`${product.name} added to your bag.`)
+      const line: CartItem = {
+        productId: product.id,
+        name: product.name,
+        price: variant ? variantPrice(product, variant) : product.price,
+        imageUrl: variant?.imageUrl || product.imageUrl,
+        quantity: Math.min(qty, stock),
+        maxStock: stock,
+      }
+      if (variant) {
+        line.variantId = variant.id
+        line.variantLabel = label
+      }
+      setItems((prev) => (prev.some((i) => cartLineKey(i) === key) ? prev : [...prev, line]))
+      showToast(`${displayName} added to your bag.`)
     },
     [items, showToast]
   )
 
-  const updateQuantity = useCallback((productId: string, qty: number) => {
+  const updateQuantity = useCallback((key: string, qty: number) => {
     if (qty <= 0) {
-      setItems((prev) => prev.filter((i) => i.productId !== productId))
+      setItems((prev) => prev.filter((i) => cartLineKey(i) !== key))
       return
     }
     setItems((prev) =>
-      prev.map((i) =>
-        i.productId === productId ? { ...i, quantity: Math.min(qty, i.maxStock) } : i
-      )
+      prev.map((i) => (cartLineKey(i) === key ? { ...i, quantity: Math.min(qty, i.maxStock) } : i))
     )
   }, [])
 
-  const removeItem = useCallback((productId: string) => {
-    setItems((prev) => prev.filter((i) => i.productId !== productId))
+  const removeItem = useCallback((key: string) => {
+    setItems((prev) => prev.filter((i) => cartLineKey(i) !== key))
   }, [])
 
   const clearCart = useCallback(() => {
@@ -149,21 +158,47 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       const next: CartItem[] = []
       for (const item of items) {
         const p = live.get(item.productId)
-        if (!p || !p.active || p.stock <= 0) {
-          changes.push(`${item.name} is no longer available and was removed.`)
+        const shownName = item.variantLabel ? `${item.name} (${item.variantLabel})` : item.name
+        if (!p || !p.active) {
+          changes.push(`${shownName} is no longer available and was removed.`)
+          continue
+        }
+        // A bag line saved before this piece had options can't be matched to one of them.
+        if (hasVariants(p) && !item.variantId) {
+          changes.push(`${p.name} now comes in different options. Please choose one again from the shop.`)
+          continue
+        }
+        const variant = findVariant(p, item.variantId)
+        if (item.variantId && !variant) {
+          changes.push(`${shownName} is no longer offered and was removed.`)
+          continue
+        }
+        const stock = variant ? variant.stock : p.stock
+        const price = variant ? variantPrice(p, variant) : p.price
+        const label = variant ? variantLabel(variant) : undefined
+        const liveName = label ? `${p.name} (${label})` : p.name
+        if (stock <= 0) {
+          changes.push(`${liveName} sold out and was removed.`)
           continue
         }
         let quantity = item.quantity
-        if (quantity > p.stock) {
-          quantity = p.stock
-          changes.push(`Only ${p.stock} ${p.name} left, so your quantity was reduced.`)
+        if (quantity > stock) {
+          quantity = stock
+          changes.push(`Only ${stock} ${liveName} left, so your quantity was reduced.`)
         }
-        if (p.price !== item.price) {
-          changes.push(
-            `${p.name} is now ${formatNaira(p.price)} (was ${formatNaira(item.price)}).`
-          )
+        if (price !== item.price) {
+          changes.push(`${liveName} is now ${formatNaira(price)} (was ${formatNaira(item.price)}).`)
         }
-        next.push({ ...item, name: p.name, price: p.price, imageUrl: p.imageUrl, quantity, maxStock: p.stock })
+        const updated: CartItem = {
+          ...item,
+          name: p.name,
+          price,
+          imageUrl: variant?.imageUrl || p.imageUrl,
+          quantity,
+          maxStock: stock,
+        }
+        if (label) updated.variantLabel = label
+        next.push(updated)
       }
       if (changes.length > 0) setItems(next)
       return changes

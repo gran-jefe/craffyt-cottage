@@ -16,6 +16,7 @@ import { auth, isFirebaseConfigured } from '@/lib/firebase'
 import {
   checkAdminAccess,
   fetchBespokeRequests,
+  fetchExpenses,
   fetchOrders,
   fetchProducts,
   fetchStoreSettings,
@@ -26,6 +27,7 @@ import { AdminOrders } from '@/components/admin/AdminOrders'
 import { AdminBespoke } from '@/components/admin/AdminBespoke'
 import { AdminSettings } from '@/components/admin/AdminSettings'
 import { AdminOverview, type OverviewNavigate } from '@/components/admin/AdminOverview'
+import { AdminExpenses } from '@/components/admin/AdminExpenses'
 import {
   AdminNavigation,
   parseSection,
@@ -35,7 +37,7 @@ import {
   type NavBadge,
 } from '@/components/admin/AdminSidebar'
 import { computeAttention } from '@/lib/analytics'
-import type { BespokeRequest, Order, OrderStatus, Product, StoreSettings } from '@/types/store'
+import type { BespokeRequest, Expense, Order, OrderStatus, Product, StoreSettings } from '@/types/store'
 
 // Reading the URL's ?section= needs a Suspense boundary for static rendering.
 export default function AdminPortalPage() {
@@ -98,6 +100,10 @@ function AdminPortal() {
   const [products, setProducts] = useState<Product[]>([])
   const [orders, setOrders] = useState<Order[]>([])
   const [bespoke, setBespoke] = useState<BespokeRequest[]>([])
+  const [expenses, setExpenses] = useState<Expense[]>([])
+  // Tracked apart from loadError: a missing expenses list must never hide orders, and profit
+  // must never be shown as if nothing had been spent.
+  const [expensesError, setExpensesError] = useState(false)
   // null = the owner has never saved settings (checkout is paused until they do).
   const [settings, setSettings] = useState<StoreSettings | null>(null)
 
@@ -105,12 +111,21 @@ function AdminPortal() {
     setLoadingData(true)
     setLoadError(false)
     try {
-      const [prods, ords, bsp, cfg] = await Promise.all([
+      const [prods, ords, bsp, cfg, exp] = await Promise.all([
         fetchProducts(true),
         fetchOrders(),
         fetchBespokeRequests(),
         fetchStoreSettings(),
+        fetchExpenses().then(
+          (rows) => ({ ok: true as const, rows }),
+          (err) => {
+            console.error(err)
+            return { ok: false as const, rows: [] as Expense[] }
+          }
+        ),
       ])
+      setExpensesError(!exp.ok)
+      if (exp.ok) setExpenses(exp.rows)
       setProducts(prods)
       setOrders(ords)
       setBespoke(bsp)
@@ -343,6 +358,7 @@ function AdminPortal() {
         orders: { count: attention.pendingCount, label: plural(attention.pendingCount, 'receipt to verify', 'receipts to verify') },
         inventory: { count: attention.lowStock.length, label: plural(attention.lowStock.length, 'piece low or sold out', 'pieces low or sold out') },
         bespoke: { count: attention.newBespokeCount, label: plural(attention.newBespokeCount, 'new request', 'new requests') },
+        ...(expensesError ? { expenses: { warning: true, label: 'expenses could not be loaded' } } : {}),
         ...(!loadError && !hasPaymentDetails(settings)
           ? { settings: { warning: true, label: 'checkout is paused until bank details are saved' } }
           : {}),
@@ -440,6 +456,8 @@ function AdminPortal() {
               orders={orders}
               products={products}
               bespoke={bespoke}
+              expenses={expenses}
+              expensesError={expensesError}
               refreshing={loadingData}
               onNavigate={navigateFromOverview}
             />
@@ -453,6 +471,8 @@ function AdminPortal() {
               initialStatusFilter={ordersStatusPreset ?? undefined}
               onRefresh={loadAll}
             />
+          ) : section === 'expenses' ? (
+            <AdminExpenses expenses={expenses} loadFailed={expensesError} onRefresh={loadAll} />
           ) : section === 'bespoke' ? (
             <AdminBespoke requests={bespoke} onRefresh={loadAll} />
           ) : (

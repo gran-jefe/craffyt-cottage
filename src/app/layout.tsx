@@ -19,7 +19,7 @@ const jakarta = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: 'Crafty Cottage | Hand-Beaded Bags & Accessories',
   description:
-    'Shop the Prima collection of handcrafted beaded bags in Ibadan. Order online with bank transfer checkout or design a bespoke piece in your colours.',
+    'Shop the Prima collection of hand-beaded bags, made in Nigeria. Order online with bank transfer checkout or design a bespoke piece in your colours.',
 }
 
 export default function RootLayout({

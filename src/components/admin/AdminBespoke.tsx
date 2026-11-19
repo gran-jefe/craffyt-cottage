@@ -6,6 +6,7 @@ import { updateBespokeStatus } from '@/lib/storeService'
 import { formatNaira } from '@/lib/defaults'
 import { useCart } from '@/context/CartContext'
 import type { BespokeRequest, BespokeStatus } from '@/types/store'
+import { formatPhone, whatsappDigits } from '@/lib/phone'
 
 interface Props {
   requests: BespokeRequest[]
@@ -60,10 +61,7 @@ export function AdminBespoke({ requests, onRefresh }: Props) {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {requests.map((req) => {
-            const phoneDigits = req.customerPhone.replace(/\D/g, '')
-            const waPhone = phoneDigits.startsWith('0')
-              ? `234${phoneDigits.slice(1)}`
-              : phoneDigits
+            const waPhone = whatsappDigits(req.customerPhone)
 
             return (
               <div
@@ -75,7 +73,7 @@ export function AdminBespoke({ requests, onRefresh }: Props) {
                     <h3 className="font-serif-display text-lg font-bold text-[#17210E]">
                       {req.customerName}
                     </h3>
-                    <p className="text-xs text-[#4A5240]">{req.customerPhone}</p>
+                    <p className="text-xs text-[#4A5240]">{formatPhone(req.customerPhone)}</p>
                   </div>
                   <span
                     className={`text-xs font-bold px-2.5 py-0.5 rounded-md capitalize ${STATUS_BADGES[req.status]}`}

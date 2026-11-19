@@ -10,16 +10,17 @@ import {
   query,
   orderBy,
   writeBatch,
-  increment,
   runTransaction,
 } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import type { User } from 'firebase/auth'
 import { db, storage, isFirebaseConfigured } from './firebase'
 import { DEFAULT_PRODUCTS, DEFAULT_STORE_SETTINGS } from './defaults'
+import { applyStockMoves, cleanVariants, lineKey, stockForLine, sumStock } from './variants'
 import type {
   BespokeRequest,
   BespokeStatus,
+  Expense,
   Order,
   OrderItem,
   OrderStatus,
@@ -33,6 +34,7 @@ const DEMO_KEYS = {
   products: 'cc_demo_products_v1',
   orders: 'cc_demo_orders_v1',
   bespoke: 'cc_demo_bespoke_v1',
+  expenses: 'cc_demo_expenses_v1',
   settings: 'cc_demo_settings_v1',
 }
 
@@ -206,11 +208,13 @@ export async function saveProduct(
   input: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> & { id?: string; createdAt?: string }
 ): Promise<Product> {
   const now = new Date().toISOString()
-  const payload = {
+  const variants = cleanVariants(input.variants)
+  const payload: Omit<Product, 'id'> = {
     name: input.name.trim(),
     collection: input.collection.trim(),
     price: Number(input.price),
-    stock: Math.max(0, Math.floor(Number(input.stock))),
+    // With options, the shelf total is always derived from them so the two can't drift apart.
+    stock: variants.length > 0 ? sumStock(variants) : Math.max(0, Math.floor(Number(input.stock))),
     tag: input.tag.trim(),
     description: input.description.trim(),
     imageUrl: input.imageUrl.trim(),
@@ -219,6 +223,8 @@ export async function saveProduct(
     createdAt: input.createdAt || now,
     updatedAt: now,
   }
+  // Omitted rather than [] so products without options keep their original shape.
+  if (variants.length > 0) payload.variants = variants
 
   if (isFirebaseConfigured && db) {
     if (input.id) {
@@ -245,18 +251,25 @@ export async function saveProduct(
  * computed from a possibly stale screen. A sale confirmed at the same moment is therefore kept.
  * Returns the new stock count.
  */
-export async function adjustProductStockBy(productId: string, delta: number): Promise<number> {
+export async function adjustProductStockBy(productId: string, delta: number, variantId?: string): Promise<number> {
   const step = Math.trunc(delta)
   const now = new Date().toISOString()
+  const moves = new Map([[variantId ?? '', step]])
+  // Returns the count the admin just changed: the option's stock, or the product's.
+  const resultFor = (applied: { stock: number; variants?: Product['variants'] }) =>
+    variantId ? applied.variants?.find((v) => v.id === variantId)?.stock ?? 0 : applied.stock
+
   if (isFirebaseConfigured && db) {
     const firestore = db
     return runTransaction(firestore, async (tx) => {
       const ref = doc(firestore, 'products', productId)
       const snap = await tx.get(ref)
       if (!snap.exists()) throw new Error('Product no longer exists')
-      const next = Math.max(0, Math.floor(Number(snap.data().stock) || 0) + step)
-      tx.update(ref, { stock: next, updatedAt: now })
-      return next
+      const data = snap.data() as Product
+      if (variantId && stockForLine(data, variantId) === null) throw new Error('Option no longer exists')
+      const applied = applyStockMoves(data, moves)
+      tx.update(ref, { ...applied, updatedAt: now })
+      return resultFor(applied)
     })
   }
   const rows = readDemo<Product[]>(DEMO_KEYS.products, DEFAULT_PRODUCTS)
@@ -265,8 +278,9 @@ export async function adjustProductStockBy(productId: string, delta: number): Pr
     DEMO_KEYS.products,
     rows.map((p) => {
       if (p.id !== productId) return p
-      next = Math.max(0, p.stock + step)
-      return { ...p, stock: next, updatedAt: now }
+      const applied = applyStockMoves(p, moves)
+      next = resultFor(applied)
+      return { ...p, ...applied, updatedAt: now }
     })
   )
   return next
@@ -410,13 +424,7 @@ export async function createOfflineOrder(input: CreateOfflineOrderInput): Promis
     updatedAt: now,
   }
 
-  const qtyByProduct = new Map<string, number>()
-  if (input.deductStock) {
-    for (const item of input.items) {
-      if (!item.productId || item.productId === 'custom') continue
-      qtyByProduct.set(item.productId, (qtyByProduct.get(item.productId) || 0) + item.quantity)
-    }
-  }
+  const moves = input.deductStock ? movesByProduct(stockHeldByOrder(input.items), -1) : new Map<string, Map<string, number>>()
 
   if (isFirebaseConfigured && db) {
     const batch = writeBatch(db)
@@ -424,15 +432,11 @@ export async function createOfflineOrder(input: CreateOfflineOrderInput): Promis
     batch.set(orderRef, orderDoc)
     batch.set(doc(db, 'orderTracking', orderCode), trackingDoc)
 
-    for (const [productId, qty] of qtyByProduct.entries()) {
+    for (const [productId, productMoves] of moves) {
       const prodRef = doc(db, 'products', productId)
       const prodSnap = await getDoc(prodRef)
       if (prodSnap.exists()) {
-        const currentStock = Number(prodSnap.data().stock || 0)
-        batch.update(prodRef, {
-          stock: Math.max(0, Math.floor(currentStock) - qty),
-          updatedAt: now,
-        })
+        batch.update(prodRef, { ...applyStockMoves(prodSnap.data() as Product, productMoves), updatedAt: now })
       }
     }
 
@@ -445,11 +449,11 @@ export async function createOfflineOrder(input: CreateOfflineOrderInput): Promis
   const nextOrders = [saved, ...orders].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   writeDemo(DEMO_KEYS.orders, nextOrders)
 
-  if (qtyByProduct.size > 0) {
+  if (moves.size > 0) {
     const products = readDemo<Product[]>(DEMO_KEYS.products, DEFAULT_PRODUCTS)
     const updatedProducts = products.map((p) => {
-      const qty = qtyByProduct.get(p.id)
-      return qty ? { ...p, stock: Math.max(0, p.stock - qty), updatedAt: now } : p
+      const productMoves = moves.get(p.id)
+      return productMoves ? { ...p, ...applyStockMoves(p, productMoves), updatedAt: now } : p
     })
     writeDemo(DEMO_KEYS.products, updatedProducts)
   }
@@ -481,15 +485,44 @@ export function isStockDeducted(order: Pick<Order, 'status' | 'channel' | 'stock
   return PAID_STATUSES.includes(order.status)
 }
 
-/** Catalogue quantities held by an order, merged per product (custom offline lines hold no stock). */
-export function stockHeldByOrder(items: OrderItem[]): Map<string, { name: string; quantity: number }> {
-  const held = new Map<string, { name: string; quantity: number }>()
+export interface HeldLine {
+  productId: string
+  variantId?: string
+  /** Customer-facing name including the option, e.g. "Dupree (Gold / Large)". */
+  name: string
+  quantity: number
+}
+
+/**
+ * Catalogue quantities held by an order, merged per product option (custom offline lines hold
+ * no stock). Keyed by lineKey(productId, variantId).
+ */
+export function stockHeldByOrder(items: OrderItem[]): Map<string, HeldLine> {
+  const held = new Map<string, HeldLine>()
   for (const item of items) {
     if (!item.productId || item.productId === 'custom') continue
-    const prev = held.get(item.productId)
-    held.set(item.productId, { name: item.name, quantity: (prev?.quantity ?? 0) + item.quantity })
+    const key = lineKey(item.productId, item.variantId)
+    const prev = held.get(key)
+    held.set(key, {
+      productId: item.productId,
+      variantId: item.variantId,
+      name: item.variantLabel ? `${item.name} (${item.variantLabel})` : item.name,
+      quantity: (prev?.quantity ?? 0) + item.quantity,
+    })
   }
   return held
+}
+
+/** Groups held lines per product: productId → (variantId or '') → signed quantity. */
+function movesByProduct(held: Map<string, HeldLine>, sign: 1 | -1): Map<string, Map<string, number>> {
+  const out = new Map<string, Map<string, number>>()
+  for (const line of held.values()) {
+    const perProduct = out.get(line.productId) ?? new Map<string, number>()
+    const key = line.variantId ?? ''
+    perProduct.set(key, (perProduct.get(key) ?? 0) + sign * line.quantity)
+    out.set(line.productId, perProduct)
+  }
+  return out
 }
 
 /**
@@ -524,13 +557,14 @@ export class StockShortageError extends Error {
 }
 
 function findShortages(
-  held: Map<string, { name: string; quantity: number }>,
-  stockFor: (productId: string) => number | null
+  held: Map<string, HeldLine>,
+  stockFor: (line: HeldLine) => number | null
 ): string[] {
   const shortages: string[] = []
-  for (const [productId, { name, quantity }] of held) {
-    const stock = stockFor(productId)
-    if (stock === null) continue // product deleted since the order was placed
+  for (const line of held.values()) {
+    const { name, quantity } = line
+    const stock = stockFor(line)
+    if (stock === null) continue // product or option deleted since the order was placed
     if (stock < quantity) {
       shortages.push(`${name} has ${stock} left but the order needs ${quantity}`)
     }
@@ -568,18 +602,22 @@ export async function updateOrderStatus(
       if (!snap.exists()) throw new Error('Order no longer exists')
       const stored = snap.data() as Order
       const move = planStockMove(stored, newStatus, restock)
-      const held = move ? stockHeldByOrder(stored.items) : new Map<string, { name: string; quantity: number }>()
+      const held = move ? stockHeldByOrder(stored.items) : new Map<string, HeldLine>()
 
-      const ids = Array.from(held.keys())
+      const ids = Array.from(new Set(Array.from(held.values(), (l) => l.productId)))
       const productRefs = ids.map((id) => doc(firestore, 'products', id))
       const productSnaps = await Promise.all(productRefs.map((r) => tx.get(r)))
-      const stockById = new Map(
-        productSnaps.map((ps, i) => [ids[i], ps.exists() ? Math.floor(Number(ps.data().stock) || 0) : null])
+      const storedById = new Map(
+        productSnaps.map((ps, i) => [ids[i], ps.exists() ? (ps.data() as Product) : null])
       )
+      const stockFor = (l: HeldLine) => {
+        const p = storedById.get(l.productId)
+        return p ? stockForLine(p, l.variantId) : null
+      }
 
       if (move === 'deduct') {
         // Rules reject negative stock, which would surface as an opaque permission error.
-        const shortages = findShortages(held, (id) => stockById.get(id) ?? null)
+        const shortages = findShortages(held, stockFor)
         if (shortages.length > 0) throw new StockShortageError(shortages)
       }
 
@@ -596,13 +634,16 @@ export async function updateOrderStatus(
         updatedAt: now,
       })
 
-      let stockChange = 0
       const sign = move === 'restore' ? 1 : -1
-      productSnaps.forEach((ps, i) => {
-        if (!ps.exists()) return // product deleted since the order was placed
-        const qty = held.get(ids[i])!.quantity
-        stockChange += sign * qty
-        tx.update(productRefs[i], { stock: increment(sign * qty), updatedAt: now })
+      let stockChange = 0
+      for (const l of held.values()) if (stockFor(l) !== null) stockChange += sign * l.quantity
+      const moves = movesByProduct(held, sign)
+      // Read-modify-write inside the transaction: variant stock lives in an array, which
+      // increment() can't reach, and the transaction retries if a sale lands in between.
+      ids.forEach((id, i) => {
+        const p = storedById.get(id)
+        if (!p) return // product deleted since the order was placed
+        tx.update(productRefs[i], { ...applyStockMoves(p, moves.get(id)!), updatedAt: now })
       })
       return { stockChange }
     })
@@ -611,13 +652,14 @@ export async function updateOrderStatus(
   const orders = readDemo<Order[]>(DEMO_KEYS.orders, [])
   const stored = orders.find((o) => o.id === order.id) ?? order
   const move = planStockMove(stored, newStatus, restock)
-  const held = move ? stockHeldByOrder(stored.items) : new Map<string, { name: string; quantity: number }>()
+  const held = move ? stockHeldByOrder(stored.items) : new Map<string, HeldLine>()
   const products = readDemo<Product[]>(DEMO_KEYS.products, DEFAULT_PRODUCTS)
+  const demoStockFor = (l: HeldLine) => {
+    const p = products.find((x) => x.id === l.productId)
+    return p ? stockForLine(p, l.variantId) : null
+  }
   if (move === 'deduct') {
-    const shortages = findShortages(held, (id) => {
-      const p = products.find((x) => x.id === id)
-      return p ? p.stock : null
-    })
+    const shortages = findShortages(held, demoStockFor)
     if (shortages.length > 0) throw new StockShortageError(shortages)
   }
   writeDemo(
@@ -636,13 +678,13 @@ export async function updateOrderStatus(
   let stockChange = 0
   if (move) {
     const sign = move === 'restore' ? 1 : -1
+    for (const l of held.values()) if (demoStockFor(l) !== null) stockChange += sign * l.quantity
+    const moves = movesByProduct(held, sign)
     writeDemo(
       DEMO_KEYS.products,
       products.map((p) => {
-        const h = held.get(p.id)
-        if (!h) return p
-        stockChange += sign * h.quantity
-        return { ...p, stock: Math.max(0, p.stock + sign * h.quantity), updatedAt: now }
+        const productMoves = moves.get(p.id)
+        return productMoves ? { ...p, ...applyStockMoves(p, productMoves), updatedAt: now } : p
       })
     )
   }
@@ -719,6 +761,54 @@ export async function updateBespokeStatus(id: string, status: BespokeStatus): Pr
     DEMO_KEYS.bespoke,
     rows.map((r) => (r.id === id ? { ...r, status } : r))
   )
+}
+
+/* ---------- Expenses ---------- */
+export async function fetchExpenses(): Promise<Expense[]> {
+  if (isFirebaseConfigured && db) {
+    const snap = await getDocs(query(collection(db, 'expenses'), orderBy('periodKey', 'desc')))
+    return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Expense, 'id'>) }))
+  }
+  return readDemo<Expense[]>(DEMO_KEYS.expenses, []).sort((a, b) => b.periodKey.localeCompare(a.periodKey))
+}
+
+export async function saveExpense(
+  input: Omit<Expense, 'id' | 'createdAt' | 'updatedAt'> & { id?: string; createdAt?: string }
+): Promise<Expense> {
+  const now = new Date().toISOString()
+  const payload: Omit<Expense, 'id'> = {
+    description: input.description.trim(),
+    category: input.category.trim(),
+    amount: Math.round(Number(input.amount) * 100) / 100,
+    period: input.period,
+    periodKey: input.periodKey,
+    createdAt: input.createdAt || now,
+    updatedAt: now,
+  }
+  if (isFirebaseConfigured && db) {
+    if (input.id) {
+      await setDoc(doc(db, 'expenses', input.id), payload)
+      return { id: input.id, ...payload }
+    }
+    const created = await addDoc(collection(db, 'expenses'), payload)
+    return { id: created.id, ...payload }
+  }
+  const rows = readDemo<Expense[]>(DEMO_KEYS.expenses, [])
+  if (input.id) {
+    writeDemo(DEMO_KEYS.expenses, rows.map((e) => (e.id === input.id ? { id: input.id!, ...payload } : e)))
+    return { id: input.id, ...payload }
+  }
+  const saved: Expense = { id: `exp-${Date.now()}`, ...payload }
+  writeDemo(DEMO_KEYS.expenses, [saved, ...rows])
+  return saved
+}
+
+export async function deleteExpense(id: string): Promise<void> {
+  if (isFirebaseConfigured && db) {
+    await deleteDoc(doc(db, 'expenses', id))
+    return
+  }
+  writeDemo(DEMO_KEYS.expenses, readDemo<Expense[]>(DEMO_KEYS.expenses, []).filter((e) => e.id !== id))
 }
 
 /* ---------- Store Settings ---------- */

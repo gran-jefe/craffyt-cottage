@@ -2,32 +2,22 @@ import type { Product, StoreSettings } from '@/types/store'
 
 export const DEFAULT_PRODUCTS: Product[] = [
   {
-    id: 'dupree-gold',
-    name: 'Dupree Midi, Gold',
+    id: 'dupree-midi',
+    name: 'Dupree Midi',
     collection: 'Prima Collection',
     price: 45000,
-    stock: 4,
+    // Always the sum of the variants' stock.
+    stock: 7,
     tag: 'Signature',
     description:
-      'Sculptural heart silhouette crafted with faceted metallic gold acrylic beads, sturdy beaded top handle, and satin lining.',
+      'Sculptural heart silhouette with a sturdy beaded top handle and satin lining. In faceted metallic gold, or deep translucent amethyst crystal that catches the light.',
     imageUrl: '/images/products/dupree-gold.jpg',
     active: true,
     featured: true,
-    createdAt: '2026-11-05T12:00:00.000Z',
-    updatedAt: '2026-11-05T12:00:00.000Z',
-  },
-  {
-    id: 'dupree-purple',
-    name: 'Dupree Midi, Purple',
-    collection: 'Prima Collection',
-    price: 45000,
-    stock: 3,
-    tag: 'Royal Amethyst',
-    description:
-      'The signature heart shape in deep translucent amethyst purple crystal beads that catch direct light effortlessly.',
-    imageUrl: '/images/products/dupree-purple.jpg',
-    active: true,
-    featured: true,
+    variants: [
+      { id: 'gold', color: 'Gold', size: '', stock: 4, imageUrl: '/images/products/dupree-gold.jpg' },
+      { id: 'purple', color: 'Purple', size: '', stock: 3, imageUrl: '/images/products/dupree-purple.jpg' },
+    ],
     createdAt: '2026-11-05T12:00:00.000Z',
     updatedAt: '2026-11-05T12:00:00.000Z',
   },

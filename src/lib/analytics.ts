@@ -11,7 +11,8 @@
  *   price × quantity only.
  * - Offline sales are dated by their sale date (stored as createdAt).
  */
-import type { BespokeRequest, BespokeStatus, Order, OrderStatus, Product } from '@/types/store'
+import type { BespokeRequest, BespokeStatus, Expense, ExpensePeriod, Order, OrderStatus, Product } from '@/types/store'
+import { hasVariants, lineKey, variantLabel } from './variants'
 
 export const DAY_MS = 24 * 60 * 60 * 1000
 const WAT_OFFSET_MS = 60 * 60 * 1000 // Africa/Lagos is UTC+1 all year
@@ -226,6 +227,74 @@ export function resolveRange(filters: DashboardFilters, now: number, earliest: n
   }
 }
 
+/* ---------- Expenses ---------- */
+
+export const EXPENSE_CATEGORIES = [
+  'Beads and materials',
+  'Packaging',
+  'Delivery and transport',
+  'Rent and utilities',
+  'Data and airtime',
+  'Marketing and ads',
+  'Staff and wages',
+  'Equipment and tools',
+  'Bank and platform fees',
+  'Other',
+] as const
+
+export const EXPENSE_PERIOD_LABELS: Record<ExpensePeriod, string> = {
+  day: 'One day',
+  month: 'A whole month',
+  year: 'A whole year',
+}
+
+/** The Nigeria-time window an expense covers, or null when its periodKey is malformed. */
+export function expenseBounds(e: Pick<Expense, 'period' | 'periodKey'>): { start: number; end: number } | null {
+  if (e.period === 'day') {
+    const start = parseDateInput(e.periodKey)
+    return start === null ? null : { start, end: start + DAY_MS }
+  }
+  if (e.period === 'month') {
+    const m = /^(\d{4})-(\d{2})$/.exec(e.periodKey)
+    if (!m || Number(m[2]) < 1 || Number(m[2]) > 12) return null
+    const y = Number(m[1])
+    const mo = Number(m[2]) - 1
+    return { start: watMidnight(y, mo, 1), end: watMidnight(y, mo + 1, 1) }
+  }
+  const m = /^(\d{4})$/.exec(e.periodKey)
+  if (!m) return null
+  const y = Number(m[1])
+  return { start: watMidnight(y, 0, 1), end: watMidnight(y + 1, 0, 1) }
+}
+
+/**
+ * The part of an expense that falls inside [start, end), spread evenly per day.
+ * A ₦30,000 November rent counts ₦1,000 for each day of November.
+ */
+export function expenseShare(e: Expense, start: number, end: number): number {
+  const b = expenseBounds(e)
+  if (!b) return 0
+  const overlap = Math.min(b.end, end) - Math.max(b.start, start)
+  if (overlap <= 0) return 0
+  return (Number(e.amount) || 0) * (overlap / (b.end - b.start))
+}
+
+/** "18 Nov 2026", "November 2026" or "2026". */
+export function expensePeriodLabel(e: Pick<Expense, 'period' | 'periodKey'>): string {
+  const b = expenseBounds(e)
+  if (!b) return e.periodKey
+  const p = watParts(b.start)
+  if (e.period === 'day') return dayLabel(b.start, true)
+  if (e.period === 'month') return `${MONTHS_LONG[p.m]} ${p.y}`
+  return String(p.y)
+}
+
+/** periodKey for "now" in Nigeria time: today, this month or this year. */
+export function currentPeriodKey(period: ExpensePeriod, now: number): string {
+  const day = toDateInput(now)
+  return period === 'day' ? day : period === 'month' ? day.slice(0, 7) : day.slice(0, 4)
+}
+
 /* ---------- Buckets ---------- */
 
 function bucketStartOf(ms: number, g: Granularity): number {
@@ -365,6 +434,14 @@ export interface DashboardData {
   pipeline: PipelineRow[]
   ordersPlaced: number
   bespoke: BespokeSummary
+  /** Verified sales from every channel: the base for profit, whatever the channel filter. */
+  allSales: Metric
+  /** Expenses falling in the period, spread per day. */
+  expenses: Metric
+  /** allSales minus expenses. */
+  profit: Metric
+  /** `orders` holds the number of expenses that touch the period. */
+  expensesByCategory: BreakdownRow[]
 }
 
 const PIPELINE_ORDER: OrderStatus[] = [
@@ -394,10 +471,16 @@ export function computeDashboard(
   bespoke: BespokeRequest[],
   filters: DashboardFilters,
   now: number,
-  options: { topProductLimit?: number } = {}
+  options: { topProductLimit?: number; expenses?: Expense[] } = {}
 ): DashboardData {
   const topLimit = options.topProductLimit ?? 5
+  const expenses = options.expenses ?? []
   const times = orders.map(orderTime).filter((t) => Number.isFinite(t))
+  // "All time" should reach back to the first recorded cost too, not only the first sale.
+  for (const e of expenses) {
+    const b = expenseBounds(e)
+    if (b && b.start <= now) times.push(b.start)
+  }
   const earliest = times.length > 0 ? Math.min(...times) : null
   const range = resolveRange(filters, now, earliest)
 
@@ -492,8 +575,37 @@ export function computeDashboard(
     if (r.status !== 'completed') openValue += Number(r.estimatedPrice) || 0
   }
 
+  // Profit: expenses aren't tied to a channel, so it always uses sales from every channel.
+  const paidAll = (a: number, b: number) =>
+    orders.filter((o) => isPaid(o) && inWindow(orderTime(o), a, b)).reduce((n, o) => n + (Number(o.total) || 0), 0)
+  const spent = (a: number, b: number) => expenses.reduce((n, e) => n + expenseShare(e, a, b), 0)
+  const hasPrev = range.prevStart !== null && range.prevEnd !== null
+  const allSalesNow = paidAll(range.start, range.end)
+  const spentNow = spent(range.start, range.end)
+  const allSalesPrev = hasPrev ? paidAll(range.prevStart!, range.prevEnd!) : null
+  const spentPrev = hasPrev ? spent(range.prevStart!, range.prevEnd!) : null
+
+  const byCategory = new Map<string, BreakdownRow>()
+  for (const e of expenses) {
+    const share = expenseShare(e, range.start, range.end)
+    if (share <= 0) continue
+    const key = e.category || 'Other'
+    const row = byCategory.get(key) ?? { key, label: key, value: 0, orders: 0 }
+    row.value += share
+    row.orders += 1
+    byCategory.set(key, row)
+  }
+  const expensesByCategory = Array.from(byCategory.values()).sort((a, b) => b.value - a.value)
+
   return {
     range,
+    allSales: { value: allSalesNow, previous: allSalesPrev },
+    expenses: { value: spentNow, previous: spentPrev },
+    profit: {
+      value: allSalesNow - spentNow,
+      previous: allSalesPrev !== null && spentPrev !== null ? allSalesPrev - spentPrev : null,
+    },
+    expensesByCategory,
     sales: { value: cur.sales, previous: prev ? prev.sales : null },
     paidOrders: { value: cur.count, previous: prev ? prev.count : null },
     averageOrderValue: { value: cur.aov, previous: prev ? prev.aov : null },
@@ -531,10 +643,17 @@ export function computeAttention(
 ): AttentionData {
   const pending = orders.filter((o) => o.status === 'pending_verification')
   const pendingTimes = pending.map(orderTime).filter((t) => Number.isFinite(t))
+  // Pieces with colour/size options are checked per option: one sold-out colour matters even
+  // when the product still has plenty of others.
   const lowStock = products
-    .filter((p) => p.active && p.stock <= LOW_STOCK_THRESHOLD)
+    .filter((p) => p.active)
+    .flatMap((p) =>
+      hasVariants(p)
+        ? p.variants.map((v) => ({ id: lineKey(p.id, v.id), name: `${p.name} (${variantLabel(v)})`, stock: v.stock }))
+        : [{ id: p.id, name: p.name, stock: p.stock }]
+    )
+    .filter((p) => p.stock <= LOW_STOCK_THRESHOLD)
     .sort((a, b) => a.stock - b.stock || a.name.localeCompare(b.name))
-    .map((p) => ({ id: p.id, name: p.name, stock: p.stock }))
   return {
     pendingCount: pending.length,
     pendingValue: pending.reduce((s, o) => s + (Number(o.total) || 0), 0),
@@ -550,7 +669,8 @@ export function computeAttention(
 /** Percentage change, or null when there is no meaningful base (no comparison, or previous was 0). */
 export function percentChange(metric: Metric): number | null {
   if (metric.previous === null || metric.previous === 0) return null
-  return ((metric.value - metric.previous) / metric.previous) * 100
+  // Divide by the size of the base so a loss shrinking (−₦50K → −₦10K) reads as a rise.
+  return ((metric.value - metric.previous) / Math.abs(metric.previous)) * 100
 }
 
 /** ₦950 · ₦12.5K · ₦1.2M (for axes and tight spaces; full values live in tooltips and tables). */
