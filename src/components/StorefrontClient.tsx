@@ -26,7 +26,8 @@ import {
   instagramUrl,
 } from '@/lib/defaults'
 import { useCart } from '@/context/CartContext'
-import { parsePhone } from '@/lib/phone'
+import { DEFAULT_COUNTRY, parsePhoneForCountry } from '@/lib/phone'
+import { PhoneField } from '@/components/PhoneField'
 import { hasVariants, priceRange, uniqueOptions } from '@/lib/variants'
 import { ProductOptionsDialog } from '@/components/ProductOptionsDialog'
 import type { Product, StoreSettings } from '@/types/store'
@@ -97,8 +98,8 @@ function validateName(v: string): string | undefined {
   return v.trim().length < 2 ? 'Enter your name so we can follow up.' : undefined
 }
 
-function validatePhone(v: string): string | undefined {
-  const phone = parsePhone(v)
+function validatePhone(v: string, country: string): string | undefined {
+  const phone = parsePhoneForCountry(country, v)
   return phone.ok ? undefined : phone.error
 }
 
@@ -154,6 +155,7 @@ export function StorefrontClient() {
   const [beadId, setBeadId] = useState(BESPOKE_BEADS[0].id)
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
+  const [bespokeCountry, setBespokeCountry] = useState(DEFAULT_COUNTRY)
   const [notes, setNotes] = useState('')
   const [bespokeSubmitting, setBespokeSubmitting] = useState(false)
   const [bespokeSubmitted, setBespokeSubmitted] = useState(false)
@@ -247,7 +249,7 @@ export function StorefrontClient() {
     e.preventDefault()
     setBespokeError('')
     const nameErr = validateName(customerName)
-    const phoneErr = validatePhone(customerPhone)
+    const phoneErr = validatePhone(customerPhone, bespokeCountry)
     setFieldErrors({ name: nameErr, phone: phoneErr })
     if (nameErr || phoneErr) {
       document.getElementById(nameErr ? 'bespoke-name' : 'bespoke-phone')?.focus()
@@ -256,7 +258,7 @@ export function StorefrontClient() {
 
     setBespokeSubmitting(true)
     try {
-      const phone = parsePhone(customerPhone)
+      const phone = parsePhoneForCountry(bespokeCountry, customerPhone)
       await createBespokeRequest({
         customerName,
         customerPhone: phone.ok ? phone.e164 : customerPhone.trim(),
@@ -293,8 +295,9 @@ export function StorefrontClient() {
         <div className="relative max-w-6xl mx-auto px-4 sm:px-6 pt-14 pb-10 sm:pt-20 sm:pb-14 lg:pt-24 lg:pb-16">
           <div className="max-w-2xl mx-auto text-center">
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#E6C975]">The Prima Collection</p>
-            <h1 className="mt-5 font-serif-display font-normal text-[42px] sm:text-6xl lg:text-[68px] leading-[1.04] tracking-[-0.01em] text-white">
-              Hand-beaded bags,
+            <h1 className="mt-5 font-serif-display font-normal text-[min(42px,10.4vw)] sm:text-6xl lg:text-[68px] leading-[1.06] tracking-[-0.01em] text-white text-balance">
+              {/* Keep "Hand-beaded bags," together on one line; the gold phrase always starts the next. */}
+              <span className="whitespace-nowrap">Hand-beaded bags,</span>
               <br />
               <em className="italic text-[#E6C975]">made in Nigeria.</em>
             </h1>
@@ -324,7 +327,7 @@ export function StorefrontClient() {
               <ul
                 aria-label="Featured pieces"
                 aria-busy={loadingProducts}
-                className="-mx-4 px-4 sm:mx-0 sm:px-0 flex sm:justify-center gap-3 sm:gap-5 overflow-x-auto no-scrollbar snap-x"
+                className="-mx-4 px-4 scroll-px-4 sm:mx-0 sm:px-0 sm:scroll-px-0 flex sm:justify-center gap-3 sm:gap-5 overflow-x-auto no-scrollbar snap-x"
               >
                 {loadingProducts
                   ? [1, 2, 3, 4].map((n) => (
@@ -412,7 +415,7 @@ export function StorefrontClient() {
                 type="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by name, colour or collection"
+                placeholder="Search bags, colours..."
                 className="w-full min-h-[44px] pl-10 pr-10 rounded-xl bg-white border border-[#E2DACA] hover:border-[#C9BEA6] text-base sm:text-sm text-[#0F1F1D] placeholder:text-[#56625F] transition-colors duration-150"
               />
               {searchQuery && (
@@ -840,34 +843,25 @@ export function StorefrontClient() {
                       </p>
                     )}
                   </div>
-                  <div>
-                    <label htmlFor="bespoke-phone" className="block text-xs font-medium text-[#CFC6B2] mb-1.5">
-                      Phone or WhatsApp number *
-                    </label>
-                    <input
-                      id="bespoke-phone"
-                      type="tel"
-                      autoComplete="tel"
-                      value={customerPhone}
-                      onChange={(e) => {
-                        setCustomerPhone(e.target.value)
-                        if (fieldErrors.phone) setFieldErrors((f) => ({ ...f, phone: validatePhone(e.target.value) }))
-                      }}
-                      onBlur={() => customerPhone && setFieldErrors((f) => ({ ...f, phone: validatePhone(customerPhone) }))}
-                      aria-invalid={Boolean(fieldErrors.phone)}
-                      aria-describedby={fieldErrors.phone ? 'bespoke-phone-error' : undefined}
-                      placeholder="e.g. 0803 000 0000 or +44 7700 900123"
-                      className={`w-full min-h-[44px] px-3.5 rounded-xl bg-[#04201F] border text-base sm:text-sm text-white placeholder:text-[#93AFAA] ${
-                        fieldErrors.phone ? 'border-[#FCA5A5]' : 'border-[#5F918A]'
-                      }`}
-                    />
-                    {fieldErrors.phone && (
-                      <p id="bespoke-phone-error" className="mt-1.5 flex items-center gap-1.5 text-xs text-[#FCA5A5]">
-                        <AlertCircle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                        {fieldErrors.phone}
-                      </p>
-                    )}
-                  </div>
+                  <PhoneField
+                    id="bespoke-phone"
+                    label="Phone or WhatsApp number *"
+                    tone="dark"
+                    country={bespokeCountry}
+                    value={customerPhone}
+                    onCountryChange={(iso) => {
+                      setBespokeCountry(iso)
+                      if (fieldErrors.phone) setFieldErrors((f) => ({ ...f, phone: validatePhone(customerPhone, iso) }))
+                    }}
+                    onChange={(v) => {
+                      setCustomerPhone(v)
+                      if (fieldErrors.phone) setFieldErrors((f) => ({ ...f, phone: validatePhone(v, bespokeCountry) }))
+                    }}
+                    onBlur={() =>
+                      customerPhone && setFieldErrors((f) => ({ ...f, phone: validatePhone(customerPhone, bespokeCountry) }))
+                    }
+                    error={fieldErrors.phone}
+                  />
                 </div>
 
                 <div>

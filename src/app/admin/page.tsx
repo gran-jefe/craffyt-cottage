@@ -8,6 +8,7 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
   type User,
 } from 'firebase/auth'
@@ -39,6 +40,29 @@ import {
 } from '@/components/admin/AdminSidebar'
 import { computeAttention } from '@/lib/analytics'
 import type { BespokeRequest, Expense, Order, OrderStatus, Product, StoreSettings } from '@/types/store'
+
+/** Plain-language sign-in errors. Unknown codes fall back to a connection message, never a stack trace. */
+function signInErrorMessage(err: unknown): string {
+  const code = (err as { code?: string })?.code ?? ''
+  switch (code) {
+    case 'auth/invalid-credential':
+    case 'auth/invalid-login-credentials':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':
+    case 'auth/invalid-email':
+      return 'That email and password don’t match an admin account. Check both and try again.'
+    case 'auth/too-many-requests':
+      return 'Too many attempts. Wait a few minutes, or reset the password in Firebase, then try again.'
+    case 'auth/user-disabled':
+      return 'This account has been disabled. Ask the shop owner to re-enable it in Firebase.'
+    case 'auth/network-request-failed':
+      return 'Can’t reach the sign-in service. Check your internet connection and try again.'
+    case 'auth/unauthorized-domain':
+      return 'Sign-in isn’t allowed from this web address yet. Add it under Authentication › Settings › Authorized domains in Firebase.'
+    default:
+      return 'Sign-in didn’t go through. Check your connection and try again.'
+  }
+}
 
 // Reading the URL's ?section= needs a Suspense boundary for static rendering.
 export default function AdminPortalPage() {
@@ -166,11 +190,16 @@ function AdminPortal() {
     if (!auth) return
     setLoginError('')
     setShowPassword(false) // re-mask so the password isn't left visible or saved unmasked
+    // Catch typos here: every rejected attempt also shows up as a red 400 in the browser console.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) || !password) {
+      setLoginError('Enter your admin email address and password.')
+      return
+    }
     setLoggingIn(true)
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password)
-    } catch {
-      setLoginError('Invalid admin email or password.')
+    } catch (err) {
+      setLoginError(signInErrorMessage(err))
     } finally {
       setLoggingIn(false)
     }
@@ -180,11 +209,19 @@ function AdminPortal() {
     if (!auth) return
     setLoginError('')
     setGoogleLoggingIn(true)
+    const provider = new GoogleAuthProvider()
+    provider.setCustomParameters({ prompt: 'select_account' })
     try {
-      const provider = new GoogleAuthProvider()
       await signInWithPopup(auth, provider)
-    } catch {
-      setLoginError('Google sign-in was cancelled or failed. Please try again.')
+    } catch (err) {
+      const code = (err as { code?: string })?.code
+      if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment') {
+        // Popups blocked (common on phones and in-app browsers): sign in on a full page instead.
+        await signInWithRedirect(auth, provider).catch((e) => setLoginError(signInErrorMessage(e)))
+      } else if (code !== 'auth/popup-closed-by-user' && code !== 'auth/cancelled-popup-request') {
+        // Closing the Google window is a choice, not an error.
+        setLoginError(signInErrorMessage(err))
+      }
     } finally {
       setGoogleLoggingIn(false)
     }

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0B3D3A">
+<title>You’re offline | Crafty Cottage</title>
+<!-- Self-contained on purpose: the service worker shows this when nothing else can load,
+     so it uses no scripts, fonts or stylesheets that might not be cached. -->
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px;
+    background: radial-gradient(120% 90% at 12% 0%, rgb(255 255 255 / 0.08), transparent 55%),
+                linear-gradient(160deg, #0b3d3a 0%, #062e2c 55%, #04201f 100%);
+    color: #FAF8F4; font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 360px; text-align: center; }
+  .logo { display: inline-flex; flex-direction: column; align-items: center; line-height: 1; color: #fff; font-size: 26px; }
+  .logo .top { font-weight: 300; letter-spacing: .34em; margin-right: -.34em; }
+  .logo .bottom { display: flex; align-items: flex-end; margin-top: .2em; font-size: .7em; font-weight: 600; letter-spacing: .06em; }
+  .logo svg { width: 1.5em; height: 1.18em; margin: 0 .02em -.02em; }
+  h1 { margin: 40px 0 0; font: 400 30px/1.2 Georgia, "Times New Roman", serif; color: #fff; }
+  p { margin: 12px 0 0; font-size: 14px; color: #CFC6B2; }
+  a.btn {
+    display: inline-flex; align-items: center; justify-content: center; margin-top: 32px; min-height: 48px; padding: 0 32px;
+    border-radius: 14px; background: #E6C975; color: #04201F; font-size: 14px; font-weight: 600; text-decoration: none;
+    transition: background-color .15s;
+  }
+  a.btn:hover { background: #F1DA9A; }
+  a.btn:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+  @media (prefers-reduced-motion: reduce) { a.btn { transition: none; } }
+</style>
+</head>
+<body>
+<main>
+  <span class="logo" role="img" aria-label="Crafty Cottage">
+    <span class="top" aria-hidden="true">CRAFTY</span>
+    <span class="bottom" aria-hidden="true">CO<svg viewBox="0 0 30 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="square"><path d="M2.5 10.5 15 2l12.5 8.5"/><path d="M10.5 8.2V23M19.5 8.2V23"/></svg>AGE</span>
+  </span>
+  <h1>You’re offline</h1>
+  <p>This page needs an internet connection. Prices and stock are always checked live, so we don’t show them from memory. Reconnect and try again.</p>
+  <!-- An empty href reloads the page the customer was trying to open. -->
+  <a class="btn" href="">Try again</a>
+</main>
+</body>
+</html>

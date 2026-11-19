@@ -1,7 +1,8 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Playfair_Display, Plus_Jakarta_Sans } from 'next/font/google'
 import { CartProvider } from '@/context/CartContext'
 import { CartDrawer } from '@/components/CartDrawer'
+import { ServiceWorkerRegistrar } from '@/components/ServiceWorkerRegistrar'
 import './globals.css'
 
 const playfair = Playfair_Display({
@@ -21,6 +22,17 @@ export const metadata: Metadata = {
   title: 'Crafty Cottage | Hand-Beaded Bags & Accessories',
   description:
     'Shop the Prima collection of hand-beaded bags, made in Nigeria. Order online with bank transfer checkout or design a bespoke piece in your colours.',
+  applicationName: 'Crafty Cottage',
+  // iPhone "Add to Home Screen": opens full-screen with the brand name and icon.
+  appleWebApp: { capable: true, title: 'Crafty Cottage', statusBarStyle: 'default' },
+  icons: { apple: '/icons/apple-touch-icon.png' },
+  formatDetection: { telephone: false },
+}
+
+export const viewport: Viewport = {
+  themeColor: '#0B3D3A',
+  width: 'device-width',
+  initialScale: 1,
 }
 
 export default function RootLayout({
@@ -34,6 +46,7 @@ export default function RootLayout({
         <CartProvider>
           <div className="flex-1 flex flex-col">{children}</div>
           <CartDrawer />
+          <ServiceWorkerRegistrar />
         </CartProvider>
       </body>
     </html>

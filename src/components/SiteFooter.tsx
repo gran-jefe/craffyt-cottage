@@ -1,6 +1,7 @@
 import React from 'react'
 import Link from 'next/link'
 import { BrandLogo } from '@/components/BrandLogo'
+import { InstallAppButton } from '@/components/InstallAppButton'
 
 export function SiteFooter() {
   return (
@@ -24,9 +25,10 @@ export function SiteFooter() {
         </nav>
       </div>
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
-        <p className="mt-8 pt-6 border-t border-[#1F5550] text-xs text-[#CFC6B2]/80">
-          © 2026 Crafty Cottage. All rights reserved.
-        </p>
+        <div className="mt-8 pt-6 border-t border-[#1F5550] flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+          <p className="text-xs text-[#CFC6B2]/80">© 2026 Crafty Cottage. All rights reserved.</p>
+          <InstallAppButton />
+        </div>
       </div>
     </footer>
   )
