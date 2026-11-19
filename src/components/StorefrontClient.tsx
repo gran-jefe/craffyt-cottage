@@ -494,26 +494,33 @@ export function StorefrontClient() {
               </a>
             </div>
 
-            {/* Straight to what they came for: shown once there's a real choice of categories */}
-            {categoryTabs.length > 1 && (
-            <nav aria-label="Shop by category" className="mt-8">
-              <ul className="flex flex-wrap justify-center gap-2">
-                {categoryTabs.map((c) => (
-                  <li key={c.id}>
-                    <a
-                      href={`/?category=${encodeURIComponent(c.id)}#shop`}
-                      onClick={(e) => {
-                        e.preventDefault()
-                        openCategory(c.id)
-                      }}
-                      className="min-h-[44px] px-4 rounded-full border border-white/20 hover:border-[#E6C975] hover:text-[#E6C975] text-sm font-medium text-[#FAF8F4] inline-flex items-center transition-colors duration-150"
-                    >
-                      {c.name}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </nav>
+            {/* Straight to what they came for: every category in the catalogue, always visible.
+                An empty one opens on a "none yet, we can make one" message, never a dead end. */}
+            {catalog.categories.length > 0 && (
+              <nav aria-labelledby="hero-categories-label" className="mt-10">
+                <p
+                  id="hero-categories-label"
+                  className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#CFC6B2]"
+                >
+                  Shop by category
+                </p>
+                <ul className="mt-3 flex flex-wrap justify-center gap-2">
+                  {catalog.categories.map((c) => (
+                    <li key={c.id}>
+                      <a
+                        href={`/?category=${encodeURIComponent(c.id)}#shop`}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          openCategory(c.id)
+                        }}
+                        className="min-h-[44px] px-5 rounded-full border border-white/25 bg-white/[0.04] hover:border-[#E6C975] hover:text-[#E6C975] active:bg-white/10 text-sm font-medium text-[#FAF8F4] inline-flex items-center transition-colors duration-150"
+                      >
+                        {c.name}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </nav>
             )}
           </div>
 
