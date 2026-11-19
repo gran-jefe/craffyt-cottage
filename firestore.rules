@@ -97,7 +97,7 @@ service cloud.firestore {
     function isValidProduct(data) {
       let allowedKeys = [
         'name', 'collection', 'price', 'stock', 'tag',
-        'description', 'imageUrl', 'active', 'featured', 'variants',
+        'description', 'imageUrl', 'active', 'featured', 'variants', 'categoryId', 'collectionId',
         'createdAt', 'updatedAt'
       ];
       let requiredKeys = [
@@ -117,7 +117,9 @@ service cloud.firestore {
         data.featured is bool &&
         // Colour/size options. Rules can't loop over a list, so each option's fields are
         // shaped by the app; this caps the count so one product can't grow without bound.
-        (!('variants' in data) || (data.variants is list && data.variants.size() <= 40)) &&
+        (!('variants' in data) || (data.variants is list && data.variants.size() <= 200)) &&
+        validOptionalString(data, 'categoryId', 60) &&
+        validOptionalString(data, 'collectionId', 60) &&
         isValidTimestampOrString(data.createdAt) &&
         isValidTimestampOrString(data.updatedAt);
     }
@@ -333,7 +335,8 @@ service cloud.firestore {
     }
 
     match /settings/{settingId} {
-      allow get: if settingId == 'store' || isAdmin();
+      // 'store' (contact, bank, delivery) and 'catalog' (categories, collections) drive the shop.
+      allow get: if settingId in ['store', 'catalog'] || isAdmin();
       allow list: if isAdmin();
       allow create, update: if isAdmin() && isValidSettings(request.resource.data);
       allow delete: if isAdmin();

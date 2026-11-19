@@ -15,11 +15,12 @@ import {
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import type { User } from 'firebase/auth'
 import { db, storage, isFirebaseConfigured } from './firebase'
-import { DEFAULT_PRODUCTS, DEFAULT_STORE_SETTINGS } from './defaults'
+import { DEFAULT_CATALOG, DEFAULT_PRODUCTS, DEFAULT_STORE_SETTINGS } from './defaults'
 import { applyStockMoves, cleanVariants, lineKey, stockForLine, sumStock } from './variants'
 import type {
   BespokeRequest,
   BespokeStatus,
+  Catalog,
   Expense,
   Order,
   OrderItem,
@@ -35,6 +36,7 @@ const DEMO_KEYS = {
   orders: 'cc_demo_orders_v1',
   bespoke: 'cc_demo_bespoke_v1',
   expenses: 'cc_demo_expenses_v1',
+  catalog: 'cc_demo_catalog_v1',
   settings: 'cc_demo_settings_v1',
 }
 
@@ -225,6 +227,8 @@ export async function saveProduct(
   }
   // Omitted rather than [] so products without options keep their original shape.
   if (variants.length > 0) payload.variants = variants
+  if (input.categoryId) payload.categoryId = input.categoryId
+  if (input.collectionId) payload.collectionId = input.collectionId
 
   if (isFirebaseConfigured && db) {
     if (input.id) {
@@ -809,6 +813,44 @@ export async function deleteExpense(id: string): Promise<void> {
     return
   }
   writeDemo(DEMO_KEYS.expenses, readDemo<Expense[]>(DEMO_KEYS.expenses, []).filter((e) => e.id !== id))
+}
+
+/* ---------- Catalogue (categories and collections) ---------- */
+/** The admin's shop structure, or the starter one when they haven't saved theirs yet. */
+export async function fetchCatalog(): Promise<Catalog> {
+  if (isFirebaseConfigured && db) {
+    const snap = await getDoc(doc(db, 'settings', 'catalog'))
+    if (!snap.exists()) return DEFAULT_CATALOG
+    const data = snap.data() as Partial<Catalog>
+    return {
+      categories: Array.isArray(data.categories) ? data.categories : DEFAULT_CATALOG.categories,
+      collections: Array.isArray(data.collections) ? data.collections : DEFAULT_CATALOG.collections,
+      updatedAt: data.updatedAt,
+    }
+  }
+  return readDemo<Catalog>(DEMO_KEYS.catalog, DEFAULT_CATALOG)
+}
+
+export async function saveCatalog(catalog: Catalog): Promise<void> {
+  // Firestore rejects undefined: only write optional text that has a value.
+  const clean: Catalog = {
+    categories: catalog.categories.map((c) => ({
+      id: c.id,
+      name: c.name.trim(),
+      ...(c.sizeLabel?.trim() ? { sizeLabel: c.sizeLabel.trim() } : {}),
+    })),
+    collections: catalog.collections.map((c) => ({
+      id: c.id,
+      name: c.name.trim(),
+      ...(c.description?.trim() ? { description: c.description.trim() } : {}),
+    })),
+    updatedAt: new Date().toISOString(),
+  }
+  if (isFirebaseConfigured && db) {
+    await setDoc(doc(db, 'settings', 'catalog'), clean)
+    return
+  }
+  writeDemo(DEMO_KEYS.catalog, clean)
 }
 
 /* ---------- Store Settings ---------- */

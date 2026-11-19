@@ -42,6 +42,10 @@ export interface Product {
   imageUrl: string
   active: boolean
   featured: boolean
+  /** CatalogCategory.id, e.g. "waist-beads". Missing on products saved before categories existed. */
+  categoryId?: string
+  /** CatalogCollection.id. `collection` keeps the display name for older readers. */
+  collectionId?: string
   variants?: ProductVariant[]
   createdAt: string
   updatedAt: string
@@ -149,4 +153,26 @@ export interface Expense {
   periodKey: string
   createdAt: string
   updatedAt: string
+}
+
+/** A kind of product customers browse by: Bags, Waist beads, Neckpieces. Order = display order. */
+export interface CatalogCategory {
+  id: string
+  name: string
+  /** What "size" means for this kind, e.g. "Waist size (inches)". Blank = "Size". */
+  sizeLabel?: string
+}
+
+/** A themed range that can span categories: Prima Collection, Owambe Collection. */
+export interface CatalogCollection {
+  id: string
+  name: string
+  description?: string
+}
+
+/** Admin-managed shop structure, stored at settings/catalog and readable by everyone. */
+export interface Catalog {
+  categories: CatalogCategory[]
+  collections: CatalogCollection[]
+  updatedAt?: string
 }

@@ -8,6 +8,7 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
   type User,
 } from 'firebase/auth'
@@ -17,18 +18,21 @@ import { BrandLogo } from '@/components/BrandLogo'
 import {
   checkAdminAccess,
   fetchBespokeRequests,
+  fetchCatalog,
   fetchExpenses,
   fetchOrders,
   fetchProducts,
   fetchStoreSettings,
 } from '@/lib/storeService'
-import { DEFAULT_STORE_SETTINGS, hasPaymentDetails } from '@/lib/defaults'
+import { DEFAULT_CATALOG, DEFAULT_STORE_SETTINGS, hasPaymentDetails } from '@/lib/defaults'
 import { AdminInventory } from '@/components/admin/AdminInventory'
 import { AdminOrders } from '@/components/admin/AdminOrders'
 import { AdminBespoke } from '@/components/admin/AdminBespoke'
 import { AdminSettings } from '@/components/admin/AdminSettings'
 import { AdminOverview, type OverviewNavigate } from '@/components/admin/AdminOverview'
 import { AdminExpenses } from '@/components/admin/AdminExpenses'
+import { AdminCatalog } from '@/components/admin/AdminCatalog'
+import { AdminReports } from '@/components/admin/AdminReports'
 import {
   AdminNavigation,
   parseSection,
@@ -38,7 +42,30 @@ import {
   type NavBadge,
 } from '@/components/admin/AdminSidebar'
 import { computeAttention } from '@/lib/analytics'
-import type { BespokeRequest, Expense, Order, OrderStatus, Product, StoreSettings } from '@/types/store'
+import type { BespokeRequest, Catalog, Expense, Order, OrderStatus, Product, StoreSettings } from '@/types/store'
+
+/** Plain-language sign-in errors. Unknown codes fall back to a connection message, never a stack trace. */
+function signInErrorMessage(err: unknown): string {
+  const code = (err as { code?: string })?.code ?? ''
+  switch (code) {
+    case 'auth/invalid-credential':
+    case 'auth/invalid-login-credentials':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':
+    case 'auth/invalid-email':
+      return 'That email and password don’t match an admin account. Check both and try again.'
+    case 'auth/too-many-requests':
+      return 'Too many attempts. Wait a few minutes, or reset the password in Firebase, then try again.'
+    case 'auth/user-disabled':
+      return 'This account has been disabled. Ask the shop owner to re-enable it in Firebase.'
+    case 'auth/network-request-failed':
+      return 'Can’t reach the sign-in service. Check your internet connection and try again.'
+    case 'auth/unauthorized-domain':
+      return 'Sign-in isn’t allowed from this web address yet. Add it under Authentication › Settings › Authorized domains in Firebase.'
+    default:
+      return 'Sign-in didn’t go through. Check your connection and try again.'
+  }
+}
 
 // Reading the URL's ?section= needs a Suspense boundary for static rendering.
 export default function AdminPortalPage() {
@@ -105,6 +132,8 @@ function AdminPortal() {
   // Tracked apart from loadError: a missing expenses list must never hide orders, and profit
   // must never be shown as if nothing had been spent.
   const [expensesError, setExpensesError] = useState(false)
+  const [catalog, setCatalog] = useState<Catalog>(DEFAULT_CATALOG)
+  const [catalogError, setCatalogError] = useState(false)
   // null = the owner has never saved settings (checkout is paused until they do).
   const [settings, setSettings] = useState<StoreSettings | null>(null)
 
@@ -112,7 +141,7 @@ function AdminPortal() {
     setLoadingData(true)
     setLoadError(false)
     try {
-      const [prods, ords, bsp, cfg, exp] = await Promise.all([
+      const [prods, ords, bsp, cfg, exp, cat] = await Promise.all([
         fetchProducts(true),
         fetchOrders(),
         fetchBespokeRequests(),
@@ -124,7 +153,16 @@ function AdminPortal() {
             return { ok: false as const, rows: [] as Expense[] }
           }
         ),
+        fetchCatalog().then(
+          (value) => ({ ok: true as const, value }),
+          (err) => {
+            console.error(err)
+            return { ok: false as const, value: DEFAULT_CATALOG }
+          }
+        ),
       ])
+      setCatalogError(!cat.ok)
+      if (cat.ok) setCatalog(cat.value)
       setExpensesError(!exp.ok)
       if (exp.ok) setExpenses(exp.rows)
       setProducts(prods)
@@ -166,11 +204,16 @@ function AdminPortal() {
     if (!auth) return
     setLoginError('')
     setShowPassword(false) // re-mask so the password isn't left visible or saved unmasked
+    // Catch typos here: every rejected attempt also shows up as a red 400 in the browser console.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) || !password) {
+      setLoginError('Enter your admin email address and password.')
+      return
+    }
     setLoggingIn(true)
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password)
-    } catch {
-      setLoginError('Invalid admin email or password.')
+    } catch (err) {
+      setLoginError(signInErrorMessage(err))
     } finally {
       setLoggingIn(false)
     }
@@ -180,11 +223,19 @@ function AdminPortal() {
     if (!auth) return
     setLoginError('')
     setGoogleLoggingIn(true)
+    const provider = new GoogleAuthProvider()
+    provider.setCustomParameters({ prompt: 'select_account' })
     try {
-      const provider = new GoogleAuthProvider()
       await signInWithPopup(auth, provider)
-    } catch {
-      setLoginError('Google sign-in was cancelled or failed. Please try again.')
+    } catch (err) {
+      const code = (err as { code?: string })?.code
+      if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment') {
+        // Popups blocked (common on phones and in-app browsers): sign in on a full page instead.
+        await signInWithRedirect(auth, provider).catch((e) => setLoginError(signInErrorMessage(e)))
+      } else if (code !== 'auth/popup-closed-by-user' && code !== 'auth/cancelled-popup-request') {
+        // Closing the Google window is a choice, not an error.
+        setLoginError(signInErrorMessage(err))
+      }
     } finally {
       setGoogleLoggingIn(false)
     }
@@ -462,7 +513,16 @@ function AdminPortal() {
               onNavigate={navigateFromOverview}
             />
           ) : section === 'inventory' ? (
-            <AdminInventory products={products} onRefresh={loadAll} />
+            <AdminInventory products={products} catalog={catalog} onRefresh={loadAll} />
+          ) : section === 'catalog' ? (
+            <AdminCatalog
+              // Remount after each save/refresh so the editor starts from what's stored.
+              key={catalog.updatedAt ?? 'default'}
+              catalog={catalog}
+              products={products}
+              loadFailed={catalogError}
+              onRefresh={loadAll}
+            />
           ) : section === 'orders' ? (
             <AdminOrders
               orders={orders}
@@ -473,6 +533,8 @@ function AdminPortal() {
             />
           ) : section === 'expenses' ? (
             <AdminExpenses expenses={expenses} loadFailed={expensesError} onRefresh={loadAll} />
+          ) : section === 'reports' ? (
+            <AdminReports orders={orders} products={products} expenses={expenses} bespoke={bespoke} catalog={catalog} />
           ) : section === 'bespoke' ? (
             <AdminBespoke requests={bespoke} onRefresh={loadAll} />
           ) : (

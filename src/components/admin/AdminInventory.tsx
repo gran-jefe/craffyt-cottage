@@ -23,13 +23,19 @@ import {
 import { formatNaira } from '@/lib/defaults'
 import { useCart } from '@/context/CartContext'
 import { hasVariants, newVariantId, sumStock, variantLabel, variantPrice } from '@/lib/variants'
-import type { Product, ProductVariant } from '@/types/store'
+import { categoryOf, collectionName, collectionOf, sizeLabelFor } from '@/lib/catalog'
+import { SizeRangeGenerator, type GeneratedOption } from './SizeRangeGenerator'
+import type { Catalog, Product, ProductVariant } from '@/types/store'
 import { useDialogFocus } from '@/lib/useDialogFocus'
 
 interface Props {
   products: Product[]
+  catalog: Catalog
   onRefresh: () => Promise<void>
 }
+
+/** Rules allow up to 200 options per product (e.g. 10 colours × 20 sizes). */
+const MAX_OPTIONS = 200
 
 interface VariantDraft {
   id: string
@@ -54,7 +60,8 @@ interface ProductFormState {
   id?: string
   createdAt?: string
   name: string
-  collection: string
+  categoryId: string
+  collectionId: string
   price: string
   stock: string
   tag: string
@@ -66,7 +73,8 @@ interface ProductFormState {
 
 const EMPTY_FORM: ProductFormState = {
   name: '',
-  collection: 'Prima Collection',
+  categoryId: '',
+  collectionId: '',
   price: '',
   stock: '5',
   tag: '',
@@ -82,6 +90,7 @@ const EMPTY_FORM: ProductFormState = {
 /** Returns an admin-readable problem with the options, or '' when they can be saved. */
 function validateVariants(drafts: VariantDraft[]): string {
   if (drafts.length === 0) return 'Add at least one option, or switch options off.'
+  if (drafts.length > MAX_OPTIONS) return `A product can have up to ${MAX_OPTIONS} options. Remove ${drafts.length - MAX_OPTIONS}.`
   const withColor = drafts.filter((d) => d.color.trim()).length
   const withSize = drafts.filter((d) => d.size.trim()).length
   if (drafts.some((d) => !d.color.trim() && !d.size.trim())) {
@@ -111,7 +120,7 @@ function toVariants(drafts: VariantDraft[]): ProductVariant[] {
   })
 }
 
-export function AdminInventory({ products, onRefresh }: Props) {
+export function AdminInventory({ products, catalog, onRefresh }: Props) {
   const { showToast } = useCart()
   const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState<ProductFormState>(EMPTY_FORM)
@@ -141,7 +150,11 @@ export function AdminInventory({ products, onRefresh }: Props) {
   }, [modalOpen, saving, uploadingImg, uploadingVariantId])
 
   function openNew() {
-    setForm(EMPTY_FORM)
+    setForm({
+      ...EMPTY_FORM,
+      categoryId: catalog.categories[0]?.id ?? '',
+      collectionId: catalog.collections[0]?.id ?? '',
+    })
     setFormError('')
     setModalOpen(true)
   }
@@ -151,7 +164,8 @@ export function AdminInventory({ products, onRefresh }: Props) {
       id: p.id,
       createdAt: p.createdAt,
       name: p.name,
-      collection: p.collection,
+      categoryId: categoryOf(p, catalog)?.id ?? '',
+      collectionId: collectionOf(p, catalog)?.id ?? '',
       price: String(p.price),
       stock: String(p.stock),
       tag: p.tag,
@@ -199,6 +213,31 @@ export function AdminInventory({ products, onRefresh }: Props) {
 
   function updateVariant(id: string, patch: Partial<VariantDraft>) {
     setForm((f) => ({ ...f, variants: f.variants.map((v) => (v.id === id ? { ...v, ...patch } : v)) }))
+  }
+
+  /** Appends generated sizes, skipping any colour + size already listed. */
+  function addGeneratedOptions(generated: GeneratedOption[]) {
+    const key = (c: string, s: string) => `${c.trim().toLowerCase()}|${s.trim().toLowerCase()}`
+    // A single empty starter row is replaced rather than kept as a blank option.
+    const existing = form.variants.filter((v) => v.color.trim() || v.size.trim())
+    const seen = new Set(existing.map((v) => key(v.color, v.size)))
+    const fresh = generated.filter((g) => !seen.has(key(g.color, g.size)))
+    const base = Number(form.price)
+    setForm((f) => ({
+      ...f,
+      variants: [
+        ...existing,
+        ...fresh.map((g) => ({
+          ...emptyVariant(String(g.stock)),
+          color: g.color,
+          size: g.size,
+          // Blank price means "use the base price", so only store real differences.
+          price: g.price === base ? '' : String(g.price),
+        })),
+      ],
+    }))
+    const skipped = generated.length - fresh.length
+    showToast(`Added ${fresh.length} ${fresh.length === 1 ? 'option' : 'options'}${skipped ? `, skipped ${skipped} already listed` : ''}.`)
   }
 
   function setHasOptions(on: boolean) {
@@ -263,13 +302,24 @@ export function AdminInventory({ products, onRefresh }: Props) {
       setFormError('Upload a photo of this piece (or paste its image URL) before saving.')
       return
     }
+    if (!form.categoryId) {
+      setFormError('Choose a category so customers can find this piece.')
+      return
+    }
+    if (!form.collectionId) {
+      setFormError('Choose a collection for this piece.')
+      return
+    }
 
     const variants = form.hasOptions ? toVariants(form.variants) : []
     const input = {
       id: form.id,
       createdAt: form.createdAt,
       name: form.name,
-      collection: form.collection || 'Prima Collection',
+      // The name is kept alongside the id for older screens and exports.
+      collection: catalog.collections.find((c) => c.id === form.collectionId)?.name ?? 'Prima Collection',
+      categoryId: form.categoryId,
+      collectionId: form.collectionId,
       price: numPrice,
       stock: form.hasOptions ? sumStock(variants) : numStock,
       tag: form.tag,
@@ -412,7 +462,11 @@ export function AdminInventory({ products, onRefresh }: Props) {
                       {product.name}
                     </h3>
                     <p className="text-xs text-[#3F4F4C]">
-                      {product.collection} · <strong className="text-[#0B3D3A]">{formatNaira(product.price)}</strong>
+                      {categoryOf(product, catalog)?.name ?? (
+                        <span className="font-semibold text-amber-800">No category</span>
+                      )}{' '}
+                      · {collectionName(product, catalog) || 'No collection'} ·{' '}
+                      <strong className="text-[#0B3D3A]">{formatNaira(product.price)}</strong>
                     </p>
                   </div>
                   <span
@@ -639,17 +693,44 @@ export function AdminInventory({ products, onRefresh }: Props) {
                   />
                 </div>
                 <div>
+                  <label htmlFor="prod-cat" className="block text-xs font-bold mb-1">
+                    Category *
+                  </label>
+                  <select
+                    id="prod-cat"
+                    value={form.categoryId}
+                    onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))}
+                    className="w-full min-h-[44px] px-3 rounded-xl border border-[#E2DACA] bg-[#FAF8F4] text-sm"
+                  >
+                    {!form.categoryId && <option value="">Choose a category</option>}
+                    {catalog.categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="sm:col-span-2">
                   <label htmlFor="prod-col" className="block text-xs font-bold mb-1">
                     Collection *
                   </label>
-                  <input
+                  <select
                     id="prod-col"
-                    type="text"
-                    value={form.collection}
-                    onChange={(e) => setForm((f) => ({ ...f, collection: e.target.value }))}
-                    placeholder="Prima Collection"
+                    value={form.collectionId}
+                    onChange={(e) => setForm((f) => ({ ...f, collectionId: e.target.value }))}
+                    aria-describedby="prod-col-hint"
                     className="w-full min-h-[44px] px-3 rounded-xl border border-[#E2DACA] bg-[#FAF8F4] text-sm"
-                  />
+                  >
+                    {!form.collectionId && <option value="">Choose a collection</option>}
+                    {catalog.collections.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p id="prod-col-hint" className="mt-1 text-xs text-[#3F4F4C]">
+                    Add or rename categories and collections in Catalogue.
+                  </p>
                 </div>
               </div>
 
@@ -833,6 +914,11 @@ export function AdminInventory({ products, onRefresh }: Props) {
                         </fieldset>
                       )
                     })}
+                    <SizeRangeGenerator
+                      basePrice={form.price}
+                      sizeLabel={sizeLabelFor({ categoryId: form.categoryId }, catalog)}
+                      onGenerate={addGeneratedOptions}
+                    />
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <button
                         type="button"

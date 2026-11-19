@@ -30,8 +30,9 @@ import {
   formatFileSize,
   uploadMediaFile,
 } from '@/lib/storeService'
-import type { Order, StoreSettings } from '@/types/store'
-import { parsePhone } from '@/lib/phone'
+import type { DeliveryZone, Order, StoreSettings } from '@/types/store'
+import { DEFAULT_COUNTRY, parsePhoneForCountry } from '@/lib/phone'
+import { PhoneField } from '@/components/PhoneField'
 
 export default function CheckoutPage() {
   const { items, subtotal, clearCart, showToast, reconcileWithProducts } = useCart()
@@ -41,8 +42,11 @@ export default function CheckoutPage() {
 
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
+  const [phoneCountry, setPhoneCountry] = useState(DEFAULT_COUNTRY)
   const [customerEmail, setCustomerEmail] = useState('')
-  const [selectedZoneId, setSelectedZoneId] = useState(DEFAULT_STORE_SETTINGS.deliveryZones[1].id)
+  const [selectedZoneId, setSelectedZoneId] = useState('')
+  /** Delivery options exactly as the admin saved them; null until they've loaded. */
+  const [savedZones, setSavedZones] = useState<DeliveryZone[] | null>(null)
   const [address, setAddress] = useState('')
   const [notes, setNotes] = useState('')
 
@@ -98,11 +102,12 @@ export default function CheckoutPage() {
         if (!active) return
         if (cfg) {
           setSettings(cfg)
-          if (cfg.deliveryZones.length > 0) {
-            setSelectedZoneId((prev) =>
-              cfg.deliveryZones.some((z) => z.id === prev) ? prev : cfg.deliveryZones[0].id
-            )
-          }
+          // Only real fees from the admin: never fall back to built-in zones a customer could pay by mistake.
+          const zones = cfg.deliveryZones.filter((z) => z.label.trim())
+          setSavedZones(zones)
+          setSelectedZoneId((prev) => (zones.some((z) => z.id === prev) ? prev : zones[0]?.id ?? ''))
+        } else {
+          setSavedZones([])
         }
         setPaymentStatus(hasPaymentDetails(cfg) ? 'ready' : 'unavailable')
       })
@@ -116,8 +121,8 @@ export default function CheckoutPage() {
 
   const paymentReady = paymentStatus === 'ready'
 
-  const selectedZone =
-    settings.deliveryZones.find((z) => z.id === selectedZoneId) || settings.deliveryZones[0]
+  const zones = savedZones ?? []
+  const selectedZone = zones.find((z) => z.id === selectedZoneId)
   const deliveryFee = selectedZone ? selectedZone.fee : 0
   const total = subtotal + deliveryFee
 
@@ -161,7 +166,7 @@ export default function CheckoutPage() {
   function validateForm(): boolean {
     const next: Record<string, string> = {}
     if (customerName.trim().length < 2) next.customerName = 'Please enter your full name.'
-    const phone = parsePhone(customerPhone)
+    const phone = parsePhoneForCountry(phoneCountry, customerPhone)
     if (!phone.ok) next.customerPhone = phone.error
     if (
       customerEmail.trim() &&
@@ -169,12 +174,13 @@ export default function CheckoutPage() {
     ) {
       next.customerEmail = 'Please enter a valid email address or leave blank.'
     }
+    if (!selectedZone) next.deliveryZone = 'Choose where we should deliver.'
     if (address.trim().length < 5)
-      next.address = 'Please provide your delivery street address or UI hall/department.'
+      next.address = 'Enter your delivery address, or the landmark or pickup point we should use.'
     if (!receiptFile) next.receipt = 'Please upload your bank transfer receipt screenshot or PDF.'
 
     setErrors(next)
-    const order = ['customerName', 'customerPhone', 'customerEmail', 'address', 'receipt']
+    const order = ['customerName', 'customerPhone', 'customerEmail', 'deliveryZone', 'address', 'receipt']
     const first = order.find((k) => next[k])
     if (first) document.getElementById(first === 'receipt' ? 'receipt-upload' : first)?.focus()
     return Object.keys(next).length === 0
@@ -209,11 +215,11 @@ export default function CheckoutPage() {
         customerName,
         // Validated in validateForm; stored in one international format for WhatsApp links.
         customerPhone: (() => {
-          const phone = parsePhone(customerPhone)
+          const phone = parsePhoneForCountry(phoneCountry, customerPhone)
           return phone.ok ? phone.e164 : customerPhone.trim()
         })(),
         customerEmail,
-        deliveryZone: selectedZone ? selectedZone.label : 'Standard delivery',
+        deliveryZone: selectedZone ? selectedZone.label : '',
         deliveryFee,
         address,
         notes,
@@ -402,31 +408,22 @@ export default function CheckoutPage() {
                       </div>
 
                       <div>
-                        <label htmlFor="customerPhone" className="block text-xs font-bold text-[#0F1F1D] mb-1">
-                          Phone or WhatsApp number *
-                        </label>
-                        <input
+                        <PhoneField
                           id="customerPhone"
-                        autoComplete="tel"
-                          type="tel"
+                          label="Phone or WhatsApp number *"
+                          country={phoneCountry}
                           value={customerPhone}
-                          onChange={(e) => {
-                          setCustomerPhone(e.target.value)
-                          clearError('customerPhone')
-                        }}
-                        aria-invalid={fieldA11y('customerPhone')['aria-invalid']}
-                        aria-describedby={errors.customerPhone ? 'customerPhone-error' : 'customerPhone-hint'}
-                          inputMode="tel"
-                          placeholder="e.g. 0803 123 4567 or +44 7700 900123"
-                          className={`w-full min-h-[44px] px-3.5 rounded-xl border ${fieldA11y('customerPhone').borderClass} bg-[#FAF8F4] text-sm`}
+                          onCountryChange={(iso) => {
+                            setPhoneCountry(iso)
+                            clearError('customerPhone')
+                          }}
+                          onChange={(v) => {
+                            setCustomerPhone(v)
+                            clearError('customerPhone')
+                          }}
+                          error={errors.customerPhone}
+                          hint="We'll message you here about payment and delivery."
                         />
-                        {errors.customerPhone ? (
-                        <p id="customerPhone-error" className="text-xs text-[#B42318] mt-1 leading-relaxed">{errors.customerPhone}</p>
-                        ) : (
-                        <p id="customerPhone-hint" className="text-xs text-[#3F4F4C] mt-1 leading-relaxed">
-                          Outside Nigeria? Start with + and your country code.
-                        </p>
-                        )}
                       </div>
                     </div>
 
@@ -459,18 +456,42 @@ export default function CheckoutPage() {
                       <label htmlFor="deliveryZone" className="block text-xs font-bold text-[#0F1F1D] mb-1">
                         Delivery location *
                       </label>
-                      <select
-                        id="deliveryZone"
-                        value={selectedZoneId}
-                        onChange={(e) => setSelectedZoneId(e.target.value)}
-                        className="w-full min-h-[44px] px-3.5 rounded-xl border border-[#8C8270] bg-[#FAF8F4] text-sm font-medium"
-                      >
-                        {settings.deliveryZones.map((zone) => (
-                          <option key={zone.id} value={zone.id}>
-                            {zone.label} ({zone.fee === 0 ? 'Free' : formatNaira(zone.fee)}) · {zone.eta}
-                          </option>
-                        ))}
-                      </select>
+                      {savedZones === null ? (
+                        <div
+                          role="status"
+                          className="w-full min-h-[44px] px-3.5 rounded-xl border border-[#E2DACA] bg-[#F4EFE6] text-sm text-[#3F4F4C] flex items-center gap-2"
+                        >
+                          {paymentStatus !== 'error' && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
+                          {paymentStatus === 'error'
+                            ? 'Couldn’t load delivery options. Use “Try again” below.'
+                            : 'Loading delivery options…'}
+                        </div>
+                      ) : zones.length === 0 ? (
+                        <p className="w-full p-3.5 rounded-xl border border-amber-300 bg-amber-50 text-sm text-amber-950">
+                          Delivery options haven&apos;t been set up yet. Message us on WhatsApp to arrange delivery.
+                        </p>
+                      ) : (
+                        <select
+                          id="deliveryZone"
+                          value={selectedZoneId}
+                          onChange={(e) => {
+                            setSelectedZoneId(e.target.value)
+                            clearError('deliveryZone')
+                          }}
+                          aria-invalid={fieldA11y('deliveryZone')['aria-invalid']}
+                          aria-describedby={fieldA11y('deliveryZone')['aria-describedby']}
+                          className={`w-full min-h-[44px] px-3.5 rounded-xl border ${fieldA11y('deliveryZone').borderClass} bg-[#FAF8F4] text-sm font-medium`}
+                        >
+                          {zones.map((zone) => (
+                            <option key={zone.id} value={zone.id}>
+                              {zone.label} ({zone.fee === 0 ? 'Free' : formatNaira(zone.fee)}){zone.eta ? ` · ${zone.eta}` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      {errors.deliveryZone && (
+                        <p id="deliveryZone-error" className="text-xs text-[#B42318] mt-1">{errors.deliveryZone}</p>
+                      )}
                     </div>
 
                     <div>
@@ -705,9 +726,11 @@ export default function CheckoutPage() {
                       </span>
                     </div>
                     <div className="flex justify-between text-[#3F4F4C]">
-                      <span>Delivery ({selectedZone?.label.split(' ')[0]})</span>
+                      <span className="min-w-0 truncate pr-3">
+                        Delivery{selectedZone ? ` · ${selectedZone.label}` : ''}
+                      </span>
                       <span className="font-semibold text-[#0F1F1D] tabular-nums">
-                        {deliveryFee === 0 ? 'Free' : formatNaira(deliveryFee)}
+                        {!selectedZone ? 'Not chosen' : deliveryFee === 0 ? 'Free' : formatNaira(deliveryFee)}
                       </span>
                     </div>
                     <div className="pt-3 border-t border-[#E2DACA] flex justify-between items-baseline">

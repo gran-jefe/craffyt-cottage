@@ -5,6 +5,8 @@ import Link from 'next/link'
 import {
   AlertTriangle,
   ExternalLink,
+  FileSpreadsheet,
+  FolderTree,
   LayoutDashboard,
   Loader2,
   LogOut,
@@ -19,7 +21,15 @@ import {
 import { useDialogFocus } from '@/lib/useDialogFocus'
 import { BrandLogo } from '@/components/BrandLogo'
 
-export type AdminSection = 'overview' | 'inventory' | 'orders' | 'expenses' | 'bespoke' | 'settings'
+export type AdminSection =
+  | 'overview'
+  | 'inventory'
+  | 'catalog'
+  | 'orders'
+  | 'expenses'
+  | 'reports'
+  | 'bespoke'
+  | 'settings'
 
 interface SectionDef {
   id: AdminSection
@@ -34,7 +44,9 @@ const NAV_GROUPS: { heading: string | null; items: SectionDef[] }[] = [
     items: [
       { id: 'orders', label: 'Orders and sales', icon: Receipt },
       { id: 'expenses', label: 'Expenses', icon: Wallet },
+      { id: 'reports', label: 'Reports', icon: FileSpreadsheet },
       { id: 'inventory', label: 'Inventory', icon: Package },
+      { id: 'catalog', label: 'Catalogue', icon: FolderTree },
       { id: 'bespoke', label: 'Custom requests', icon: Sparkles },
     ],
   },
