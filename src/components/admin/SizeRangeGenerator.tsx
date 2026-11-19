@@ -12,63 +12,90 @@ export interface GeneratedOption {
 }
 
 interface Props {
-  /** The product's base price, used as the default price for the smallest size. */
+  /** The product's base price, used as the default price for each size. */
   basePrice: string
   sizeLabel: string
   onGenerate: (options: GeneratedOption[]) => void
 }
 
+const MAX_SIZES = 60
+
 /** 31 → "31", 31.5 → "31.5" */
-function sizeText(n: number): string {
+function numText(n: number): string {
   return String(Math.round(n * 100) / 100)
 }
 
 /**
- * Builds a run of sizes in one go, e.g. waist beads 31 to 40 where each size up costs a
- * little more. Optional colours multiply it: 3 colours × 10 sizes = 30 options.
- * Everything it creates can still be edited row by row afterwards.
+ * Reads the sizes the admin typed. Any mix works: "31, 32, 34, 36", "S, M, L", or a shortcut
+ * like "31-40" for every whole size in between. Duplicates are dropped; numbers are sorted.
+ */
+export function parseSizes(text: string): { sizes: string[]; error: string } {
+  const out: string[] = []
+  for (const raw of text.split(/[,\n]/)) {
+    const token = raw.trim()
+    if (!token) continue
+    const range = token.match(/^(\d+(?:\.\d+)?)\s*(?:-|to)\s*(\d+(?:\.\d+)?)$/i)
+    if (range) {
+      const a = Number(range[1])
+      const b = Number(range[2])
+      if (b < a) return { sizes: [], error: `"${token}": the second number must be bigger.` }
+      if (b - a >= MAX_SIZES) return { sizes: [], error: `"${token}" is more than ${MAX_SIZES} sizes.` }
+      for (let s = a; s <= b + 1e-9; s += 1) out.push(numText(s))
+    } else {
+      out.push(/^\d+(?:\.\d+)?$/.test(token) ? numText(Number(token)) : token)
+    }
+  }
+  const unique = out.filter((s, i) => out.findIndex((x) => x.toLowerCase() === s.toLowerCase()) === i)
+  if (unique.length > MAX_SIZES) return { sizes: [], error: `That's more than ${MAX_SIZES} sizes.` }
+  if (unique.every((s) => /^\d+(?:\.\d+)?$/.test(s))) unique.sort((a, b) => Number(a) - Number(b))
+  return { sizes: unique, error: '' }
+}
+
+/**
+ * Adds a set of sizes in one go, each with its own price. Sizes don't have to follow on from
+ * each other (31, 32, 34, 36 is fine) and prices don't have to rise by a fixed amount: every
+ * size's price can be typed in. "Fill prices" is just a shortcut for steady increases.
+ * Optional colours multiply it: 3 colours × 5 sizes = 15 options, all editable afterwards.
  */
 export function SizeRangeGenerator({ basePrice, sizeLabel, onGenerate }: Props) {
   const [open, setOpen] = useState(false)
-  const [from, setFrom] = useState('31')
-  const [to, setTo] = useState('40')
-  const [step, setStep] = useState('1')
-  const [startPrice, setStartPrice] = useState('')
-  const [increase, setIncrease] = useState('0')
+  const [sizesText, setSizesText] = useState('')
+  const [prices, setPrices] = useState<Record<string, string>>({})
+  const [fillStart, setFillStart] = useState('')
+  const [fillStep, setFillStep] = useState('')
   const [stock, setStock] = useState('1')
   const [colours, setColours] = useState('')
   const [error, setError] = useState('')
 
-  const start = Number(from)
-  const end = Number(to)
-  const stepN = Number(step)
-  const price0 = Number(startPrice || basePrice)
-  const inc = Number(increase || 0)
+  const { sizes, error: sizesError } = parseSizes(sizesText)
   const colourList = colours
     .split(',')
     .map((c) => c.trim())
     .filter(Boolean)
     .filter((c, i, all) => all.findIndex((x) => x.toLowerCase() === c.toLowerCase()) === i)
-
-  const valid =
-    Number.isFinite(start) && Number.isFinite(end) && stepN > 0 && end >= start && price0 > 0 && inc >= 0
-  const sizes: number[] = []
-  if (valid) for (let s = start; s <= end + 1e-9 && sizes.length <= 60; s += stepN) sizes.push(s)
+  const priceOf = (size: string) => prices[size] ?? basePrice
   const total = sizes.length * Math.max(1, colourList.length)
-  const priceAt = (i: number) => Math.round(price0 + inc * i)
+
+  function fillPrices() {
+    const start = Number(fillStart || basePrice)
+    const step = Number(fillStep || 0)
+    if (!(start > 0)) return setError('Enter the price of the smallest size to fill prices.')
+    if (step < 0) return setError('The increase per size can’t be negative.')
+    setError('')
+    setPrices(Object.fromEntries(sizes.map((s, i) => [s, String(Math.round(start + step * i))])))
+  }
 
   function generate() {
-    if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return setError('"To" must be the same as or bigger than "From".')
-    if (!(stepN > 0)) return setError('Step must be above 0, e.g. 1 for every size or 2 for every other size.')
-    if (!(price0 > 0)) return setError('Enter the price for the smallest size, or set the base price above first.')
-    if (inc < 0) return setError('Increase per size can’t be negative.')
-    if (sizes.length > 60) return setError('That’s more than 60 sizes. Narrow the range or use a bigger step.')
+    if (sizesError) return setError(sizesError)
+    if (sizes.length === 0) return setError('Type at least one size, e.g. 31, 32, 34.')
+    const missing = sizes.filter((s) => !(Number(priceOf(s)) > 0))
+    if (missing.length) return setError(`Enter a price for size ${missing.join(', ')}.`)
     const n = Number(stock)
     if (!Number.isInteger(n) || n < 0) return setError('Stock per option must be 0 or a whole number.')
     setError('')
     const out: GeneratedOption[] = []
     for (const color of colourList.length > 0 ? colourList : ['']) {
-      sizes.forEach((s, i) => out.push({ color, size: sizeText(s), price: priceAt(i), stock: n }))
+      for (const size of sizes) out.push({ color, size, price: Math.round(Number(priceOf(size))), stock: n })
     }
     onGenerate(out)
   }
@@ -81,79 +108,119 @@ export function SizeRangeGenerator({ basePrice, sizeLabel, onGenerate }: Props) 
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="w-full min-h-[44px] px-3.5 flex items-center justify-between gap-2 text-left text-sm font-semibold text-[#0B3D3A]"
+        className="w-full min-h-[44px] px-3.5 flex items-center justify-between gap-2 text-left text-sm font-semibold text-[#0B3D3A] rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B3D3A]"
       >
         <span className="inline-flex items-center gap-2">
           <Ruler className="w-4 h-4" aria-hidden="true" />
-          Add a range of sizes
+          Add several sizes at once
         </span>
         <ChevronDown className={`w-4 h-4 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
       </button>
       {open && (
         <div className="px-3.5 pb-3.5 space-y-3">
-          <p className="text-xs text-[#3F4F4C] leading-relaxed">
-            For pieces sold by {sizeLabel.toLowerCase()}: set the range and how much each size up costs. You can still
-            edit any row afterwards.
-          </p>
-          <div className="grid grid-cols-3 gap-2">
-            <div>
-              <label htmlFor="gen-from" className="block text-xs font-semibold mb-1">From</label>
-              <input id="gen-from" type="number" inputMode="decimal" value={from} onChange={(e) => setFrom(e.target.value)} className={field} />
-            </div>
-            <div>
-              <label htmlFor="gen-to" className="block text-xs font-semibold mb-1">To</label>
-              <input id="gen-to" type="number" inputMode="decimal" value={to} onChange={(e) => setTo(e.target.value)} className={field} />
-            </div>
-            <div>
-              <label htmlFor="gen-step" className="block text-xs font-semibold mb-1">Step</label>
-              <input id="gen-step" type="number" inputMode="decimal" min="0.5" step="0.5" value={step} onChange={(e) => setStep(e.target.value)} className={field} />
-            </div>
+          <div>
+            <label htmlFor="gen-sizes" className="block text-xs font-semibold mb-1">
+              {sizeLabel}
+            </label>
+            <input
+              id="gen-sizes"
+              type="text"
+              value={sizesText}
+              onChange={(e) => {
+                setSizesText(e.target.value)
+                setError('')
+              }}
+              placeholder="e.g. 31, 32, 34, 36, 40"
+              aria-describedby="gen-sizes-hint"
+              className={field.replace(' tabular-nums', '')}
+            />
+            <p id="gen-sizes-hint" className="mt-1 text-xs text-[#3F4F4C] leading-relaxed">
+              Only the sizes you sell, separated by commas. Letters work too (S, M, L).
+            </p>
+            {sizesError && <p className="mt-1 text-xs text-[#B42318]">{sizesError}</p>}
           </div>
+
+          {sizes.length > 0 && !sizesError && (
+            <fieldset className="space-y-2">
+              <legend className="text-xs font-semibold mb-1">Price for each size (₦)</legend>
+              <ul className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {sizes.map((s) => (
+                  <li key={s} className="flex items-center gap-2">
+                    <label htmlFor={`gen-price-${s}`} className="w-12 shrink-0 text-sm font-semibold text-[#0F1F1D] tabular-nums">
+                      {s}
+                    </label>
+                    <input
+                      id={`gen-price-${s}`}
+                      type="number"
+                      inputMode="numeric"
+                      min="0"
+                      value={priceOf(s)}
+                      placeholder="Price"
+                      onChange={(e) => setPrices((p) => ({ ...p, [s]: e.target.value }))}
+                      className={field}
+                    />
+                  </li>
+                ))}
+              </ul>
+              {sizes.length > 1 && (
+                <div className="flex flex-wrap items-end gap-2 pt-1">
+                  <div className="w-28">
+                    <label htmlFor="gen-fill-start" className="block text-[11px] font-semibold text-[#3F4F4C] mb-1">
+                      Smallest size (₦)
+                    </label>
+                    <input id="gen-fill-start" type="number" inputMode="numeric" value={fillStart} placeholder={basePrice || '5000'} onChange={(e) => setFillStart(e.target.value)} className={field} />
+                  </div>
+                  <div className="w-28">
+                    <label htmlFor="gen-fill-step" className="block text-[11px] font-semibold text-[#3F4F4C] mb-1">
+                      + each size (₦)
+                    </label>
+                    <input id="gen-fill-step" type="number" inputMode="numeric" min="0" value={fillStep} placeholder="200" onChange={(e) => setFillStep(e.target.value)} className={field} />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={fillPrices}
+                    className="min-h-[44px] px-3 rounded-lg border border-[#0B3D3A] text-[#0B3D3A] hover:bg-[#0B3D3A]/5 text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B3D3A]"
+                  >
+                    Fill prices
+                  </button>
+                </div>
+              )}
+            </fieldset>
+          )}
+
           <div className="grid grid-cols-3 gap-2">
-            <div>
-              <label htmlFor="gen-price" className="block text-xs font-semibold mb-1">Price, smallest (₦)</label>
-              <input
-                id="gen-price"
-                type="number"
-                inputMode="numeric"
-                value={startPrice}
-                placeholder={basePrice || '5000'}
-                onChange={(e) => setStartPrice(e.target.value)}
-                className={field}
-              />
-            </div>
-            <div>
-              <label htmlFor="gen-inc" className="block text-xs font-semibold mb-1">+ per size (₦)</label>
-              <input id="gen-inc" type="number" inputMode="numeric" min="0" value={increase} onChange={(e) => setIncrease(e.target.value)} className={field} />
-            </div>
             <div>
               <label htmlFor="gen-stock" className="block text-xs font-semibold mb-1">Stock each</label>
               <input id="gen-stock" type="number" inputMode="numeric" min="0" value={stock} onChange={(e) => setStock(e.target.value)} className={field} />
             </div>
+            <div className="col-span-2">
+              <label htmlFor="gen-colours" className="block text-xs font-semibold mb-1">Colours (optional)</label>
+              <input
+                id="gen-colours"
+                type="text"
+                value={colours}
+                onChange={(e) => setColours(e.target.value)}
+                placeholder="e.g. Red & Gold, White Pearl"
+                aria-describedby="gen-colours-hint"
+                className={field.replace(' tabular-nums', '')}
+              />
+            </div>
           </div>
-          <div>
-            <label htmlFor="gen-colours" className="block text-xs font-semibold mb-1">Colours (optional)</label>
-            <input
-              id="gen-colours"
-              type="text"
-              value={colours}
-              onChange={(e) => setColours(e.target.value)}
-              placeholder="e.g. Red & Gold, White Pearl, Emerald"
-              aria-describedby="gen-colours-hint"
-              className={field.replace(' tabular-nums', '')}
-            />
-            <p id="gen-colours-hint" className="mt-1 text-xs text-[#3F4F4C]">
-              Separate with commas. Each colour gets every size.
-            </p>
-          </div>
+          <p id="gen-colours-hint" className="-mt-1 text-xs text-[#3F4F4C]">
+            Separate colours with commas. Each colour gets every size.
+          </p>
 
-          {valid && sizes.length > 0 && sizes.length <= 60 && (
+          {sizes.length > 0 && !sizesError && (
             <p className="text-xs text-[#0F1F1D] bg-[#FAF8F4] border border-[#E2DACA] rounded-lg p-2.5 leading-relaxed" aria-live="polite">
-              Creates <strong>{total}</strong> {total === 1 ? 'option' : 'options'}: size {sizeText(sizes[0])} at{' '}
-              <strong>{formatNaira(priceAt(0))}</strong>
-              {sizes.length > 1 && (
+              Creates <strong>{total}</strong> {total === 1 ? 'option' : 'options'}
+              {Number(priceOf(sizes[0])) > 0 && (
                 <>
-                  {' '}up to size {sizeText(sizes[sizes.length - 1])} at <strong>{formatNaira(priceAt(sizes.length - 1))}</strong>
+                  : size {sizes[0]} at <strong>{formatNaira(Number(priceOf(sizes[0])))}</strong>
+                  {sizes.length > 1 && Number(priceOf(sizes[sizes.length - 1])) > 0 && (
+                    <>
+                      {' '}to size {sizes[sizes.length - 1]} at <strong>{formatNaira(Number(priceOf(sizes[sizes.length - 1])))}</strong>
+                    </>
+                  )}
                 </>
               )}
               {colourList.length > 0 && <> in {colourList.length} {colourList.length === 1 ? 'colour' : 'colours'}</>}.
@@ -167,9 +234,9 @@ export function SizeRangeGenerator({ basePrice, sizeLabel, onGenerate }: Props) 
           <button
             type="button"
             onClick={generate}
-            className="min-h-[44px] px-4 rounded-xl bg-[#0B3D3A] hover:bg-[#04201F] text-white text-xs font-bold"
+            className="min-h-[44px] px-4 rounded-xl bg-[#0B3D3A] hover:bg-[#04201F] text-white text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#0B3D3A]"
           >
-            Add these sizes
+            {total > 0 && !sizesError ? `Add ${total} ${total === 1 ? 'option' : 'options'}` : 'Add these sizes'}
           </button>
         </div>
       )}

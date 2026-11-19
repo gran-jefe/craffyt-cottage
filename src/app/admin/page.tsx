@@ -528,6 +528,7 @@ function AdminPortal() {
               orders={orders}
               products={products}
               deliveryZones={settings?.deliveryZones ?? []}
+              settings={settings}
               initialStatusFilter={ordersStatusPreset ?? undefined}
               onRefresh={loadAll}
             />
