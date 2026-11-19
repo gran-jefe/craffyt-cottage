@@ -349,10 +349,10 @@ export function AdminInventory({ products, onRefresh }: Props) {
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-serif-display text-2xl font-bold text-[#17210E]">
+          <h2 className="font-serif-display text-2xl font-bold text-[#0F1F1D]">
             Inventory
           </h2>
-          <p className="text-xs text-[#4A5240]">
+          <p className="text-xs text-[#3F4F4C]">
             Add new beaded bags, adjust live stock counts, or hide seasonal pieces.
           </p>
         </div>
@@ -361,7 +361,7 @@ export function AdminInventory({ products, onRefresh }: Props) {
           <button
             type="button"
             onClick={openNew}
-            className="min-h-[44px] px-5 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-xs font-bold flex items-center gap-2 shadow-xs"
+            className="min-h-[44px] px-5 rounded-xl bg-[#0B3D3A] hover:bg-[#04201F] text-white text-xs font-bold flex items-center gap-2 shadow-xs"
           >
             <Plus className="w-4 h-4 text-[#E6C975]" />
             <span>Add product</span>
@@ -372,12 +372,12 @@ export function AdminInventory({ products, onRefresh }: Props) {
       {/* Empty State */}
       {products.length === 0 ? (
         <div className="bg-white rounded-2xl border border-[#E2DACA] p-10 text-center space-y-4">
-          <Package className="w-8 h-8 text-[#4A5240] mx-auto opacity-60" />
+          <Package className="w-8 h-8 text-[#3F4F4C] mx-auto opacity-60" />
           <div className="space-y-1">
-            <p className="font-serif-display text-lg font-bold text-[#17210E]">
+            <p className="font-serif-display text-lg font-bold text-[#0F1F1D]">
               Your shop has no products yet
             </p>
-            <p className="text-sm text-[#4A5240]">
+            <p className="text-sm text-[#3F4F4C]">
               Seed the authentic 4 Prima bags with one click or create your first piece manually.
             </p>
           </div>
@@ -386,7 +386,7 @@ export function AdminInventory({ products, onRefresh }: Props) {
               type="button"
               onClick={handleSeed}
               disabled={seeding}
-              className="min-h-[44px] px-5 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-xs font-bold flex items-center gap-2 disabled:opacity-60"
+              className="min-h-[44px] px-5 rounded-xl bg-[#0B3D3A] hover:bg-[#04201F] text-white text-xs font-bold flex items-center gap-2 disabled:opacity-60"
             >
               {seeding && <Loader2 className="w-4 h-4 animate-spin" />}
               <span>{seeding ? 'Loading products...' : 'Load Prima Collection'}</span>
@@ -408,11 +408,11 @@ export function AdminInventory({ products, onRefresh }: Props) {
               <div className="flex-1 min-w-0 space-y-2">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <h3 className="font-serif-display text-base font-bold text-[#17210E] truncate">
+                    <h3 className="font-serif-display text-base font-bold text-[#0F1F1D] truncate">
                       {product.name}
                     </h3>
-                    <p className="text-xs text-[#4A5240]">
-                      {product.collection} · <strong className="text-[#263E0F]">{formatNaira(product.price)}</strong>
+                    <p className="text-xs text-[#3F4F4C]">
+                      {product.collection} · <strong className="text-[#0B3D3A]">{formatNaira(product.price)}</strong>
                     </p>
                   </div>
                   <span
@@ -421,7 +421,7 @@ export function AdminInventory({ products, onRefresh }: Props) {
                         ? 'bg-neutral-200 text-neutral-700'
                         : product.stock <= 0
                         ? 'bg-red-100 text-[#B42318]'
-                        : 'bg-[#EAF2DE] text-[#263E0F]'
+                        : 'bg-[#E3F0EE] text-[#0B3D3A]'
                     }`}
                   >
                     {!product.active
@@ -443,9 +443,9 @@ export function AdminInventory({ products, onRefresh }: Props) {
                             <img src={v.imageUrl} alt="" width={28} height={28} className="w-7 h-7 rounded-md object-cover shrink-0" />
                           )}
                           <span className="flex-1 min-w-0 text-xs">
-                            <span className="block font-semibold text-[#17210E] truncate">{label}</span>
+                            <span className="block font-semibold text-[#0F1F1D] truncate">{label}</span>
                             {v.price ? (
-                              <span className="block text-[#4A5240] tabular-nums">{formatNaira(variantPrice(product, v))}</span>
+                              <span className="block text-[#3F4F4C] tabular-nums">{formatNaira(variantPrice(product, v))}</span>
                             ) : null}
                           </span>
                           <button
@@ -480,7 +480,7 @@ export function AdminInventory({ products, onRefresh }: Props) {
                 {/* Stock Controls & Actions */}
                 <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                   {hasVariants(product) ? (
-                    <span className="text-xs text-[#4A5240]">
+                    <span className="text-xs text-[#3F4F4C]">
                       {product.variants.length} options · {product.stock} in total
                     </span>
                   ) : (
@@ -513,7 +513,7 @@ export function AdminInventory({ products, onRefresh }: Props) {
                     <button
                       type="button"
                       onClick={() => openEdit(product)}
-                      className="min-h-[44px] px-3 rounded-lg border border-[#E2DACA] hover:border-[#263E0F] text-xs font-semibold text-[#17210E] flex items-center gap-1"
+                      className="min-h-[44px] px-3 rounded-lg border border-[#E2DACA] hover:border-[#0B3D3A] text-xs font-semibold text-[#0F1F1D] flex items-center gap-1"
                     >
                       <Pencil className="w-3.5 h-3.5" />
                       <span>Edit</span>
@@ -551,7 +551,7 @@ export function AdminInventory({ products, onRefresh }: Props) {
       {/* Product Modal */}
       {modalOpen && (
         <div
-          className="fixed inset-0 z-50 bg-[#111B07]/60 backdrop-blur-xs flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-[#04201F]/60 backdrop-blur-xs flex items-center justify-center p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="product-modal-title"
@@ -562,7 +562,7 @@ export function AdminInventory({ products, onRefresh }: Props) {
             onClick={(e) => e.stopPropagation()}
             className="bg-white rounded-2xl border border-[#E2DACA] max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-2xl">
             <div className="flex items-center justify-between border-b border-[#E2DACA] pb-3">
-              <h3 id="product-modal-title" className="font-serif-display text-xl font-bold text-[#17210E]">
+              <h3 id="product-modal-title" className="font-serif-display text-xl font-bold text-[#0F1F1D]">
                 {form.id ? 'Edit product' : 'Add a new piece'}
               </h3>
               <button
@@ -589,7 +589,7 @@ export function AdminInventory({ products, onRefresh }: Props) {
                 ) : (
                   <div
                     aria-hidden="true"
-                    className="w-20 h-20 rounded-xl bg-[#F4EFE6] border border-dashed border-[#8C8270] text-[#4A5240] grid place-items-center shrink-0"
+                    className="w-20 h-20 rounded-xl bg-[#F4EFE6] border border-dashed border-[#8C8270] text-[#3F4F4C] grid place-items-center shrink-0"
                   >
                     <Package className="w-6 h-6" />
                   </div>
@@ -597,7 +597,7 @@ export function AdminInventory({ products, onRefresh }: Props) {
                 <div className="flex-1 space-y-2">
                   <label
                     htmlFor="prod-img-upload"
-                    className="inline-flex items-center gap-2 min-h-[44px] px-3.5 rounded-xl border border-[#263E0F] text-[#263E0F] hover:bg-[#EAF2DE] text-xs font-bold cursor-pointer"
+                    className="inline-flex items-center gap-2 min-h-[44px] px-3.5 rounded-xl border border-[#0B3D3A] text-[#0B3D3A] hover:bg-[#E3F0EE] text-xs font-bold cursor-pointer"
                   >
                     {uploadingImg ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
                     <span>{uploadingImg ? 'Uploading...' : 'Upload photo'}</span>
@@ -705,13 +705,13 @@ export function AdminInventory({ products, onRefresh }: Props) {
                     type="checkbox"
                     checked={form.hasOptions}
                     onChange={(e) => setHasOptions(e.target.checked)}
-                    className="w-4 h-4 mt-0.5 accent-[#263E0F]"
+                    className="w-4 h-4 mt-0.5 accent-[#0B3D3A]"
                   />
                   <span>
-                    <span className="block text-sm font-semibold text-[#17210E]">
+                    <span className="block text-sm font-semibold text-[#0F1F1D]">
                       Comes in different colours or sizes
                     </span>
-                    <span className="block text-xs text-[#4A5240] leading-relaxed">
+                    <span className="block text-xs text-[#3F4F4C] leading-relaxed">
                       Customers pick an option before adding to bag. Each option has its own stock, and can
                       have its own price and photo.
                     </span>
@@ -729,15 +729,15 @@ export function AdminInventory({ products, onRefresh }: Props) {
                           <div className="flex gap-3">
                             <label
                               htmlFor={`var-img-${v.id}`}
-                              className="w-14 h-14 rounded-lg border border-dashed border-[#8C8270] bg-white overflow-hidden grid place-items-center shrink-0 cursor-pointer hover:border-[#263E0F]"
+                              className="w-14 h-14 rounded-lg border border-dashed border-[#8C8270] bg-white overflow-hidden grid place-items-center shrink-0 cursor-pointer hover:border-[#0B3D3A]"
                               title="Upload a photo of this option"
                             >
                               {uploading ? (
-                                <Loader2 className="w-4 h-4 animate-spin text-[#263E0F]" />
+                                <Loader2 className="w-4 h-4 animate-spin text-[#0B3D3A]" />
                               ) : v.imageUrl ? (
                                 <img src={v.imageUrl} alt="" width={56} height={56} className="w-full h-full object-cover" />
                               ) : (
-                                <Upload className="w-4 h-4 text-[#4A5240]" />
+                                <Upload className="w-4 h-4 text-[#3F4F4C]" />
                               )}
                               <span className="sr-only">Photo for option {n} (optional)</span>
                               <input
@@ -813,7 +813,7 @@ export function AdminInventory({ products, onRefresh }: Props) {
                               <button
                                 type="button"
                                 onClick={() => updateVariant(v.id, { imageUrl: '' })}
-                                className="min-h-[44px] px-3 rounded-lg text-xs font-semibold text-[#4A5240] hover:bg-[#F4EFE6]"
+                                className="min-h-[44px] px-3 rounded-lg text-xs font-semibold text-[#3F4F4C] hover:bg-[#F4EFE6]"
                               >
                                 Remove photo
                               </button>
@@ -837,12 +837,12 @@ export function AdminInventory({ products, onRefresh }: Props) {
                       <button
                         type="button"
                         onClick={() => setForm((f) => ({ ...f, variants: [...f.variants, emptyVariant()] }))}
-                        className="min-h-[44px] px-3.5 rounded-xl border border-[#263E0F]/40 text-[#263E0F] hover:bg-[#EAF2DE] text-xs font-bold flex items-center gap-1.5"
+                        className="min-h-[44px] px-3.5 rounded-xl border border-[#0B3D3A]/40 text-[#0B3D3A] hover:bg-[#E3F0EE] text-xs font-bold flex items-center gap-1.5"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>Add option</span>
                       </button>
-                      <span className="text-xs text-[#4A5240] tabular-nums">
+                      <span className="text-xs text-[#3F4F4C] tabular-nums">
                         Total stock: {sumStock(toVariants(form.variants.filter((d) => Number.isInteger(Number(d.stock)))))}
                       </span>
                     </div>
@@ -870,7 +870,7 @@ export function AdminInventory({ products, onRefresh }: Props) {
                     type="checkbox"
                     checked={form.active}
                     onChange={(e) => setForm((f) => ({ ...f, active: e.target.checked }))}
-                    className="w-4 h-4 accent-[#263E0F]"
+                    className="w-4 h-4 accent-[#0B3D3A]"
                   />
                   <span className="font-semibold">Visible on storefront</span>
                 </label>
@@ -879,7 +879,7 @@ export function AdminInventory({ products, onRefresh }: Props) {
                     type="checkbox"
                     checked={form.featured}
                     onChange={(e) => setForm((f) => ({ ...f, featured: e.target.checked }))}
-                    className="w-4 h-4 accent-[#263E0F]"
+                    className="w-4 h-4 accent-[#0B3D3A]"
                   />
                   <span className="font-semibold">Featured piece</span>
                 </label>
@@ -902,7 +902,7 @@ export function AdminInventory({ products, onRefresh }: Props) {
                 <button
                   type="submit"
                   disabled={saving || uploadingImg || Boolean(uploadingVariantId)}
-                  className="min-h-[44px] px-6 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-xs font-bold flex items-center gap-2 disabled:opacity-60"
+                  className="min-h-[44px] px-6 rounded-xl bg-[#0B3D3A] hover:bg-[#04201F] text-white text-xs font-bold flex items-center gap-2 disabled:opacity-60"
                 >
                   {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   <span>{saving ? 'Saving...' : 'Save product'}</span>

@@ -3,12 +3,12 @@
  *
  * Series colours are brand-derived and validated with the dataviz palette checks on #FFFFFF
  * (lightness band, chroma floor, CVD ΔE 10.1 protan, normal-vision ΔE 19.7, both ≥ 3:1).
- * Colour follows the entity: online is always forest, offline always gold, whatever the filter.
+ * Colour follows the entity: online is always teal, offline always gold, whatever the filter.
  * Text never uses series colours; all text roles below are ≥ 4.5:1 on white and on linen.
  */
 export const CHART = {
   /** Categorical slot 1: online sales, and the single-series bar colour. */
-  online: '#3F7A2B',
+  online: '#1F7A72',
   /** Categorical slot 2: offline sales. */
   offline: '#C08A1E',
   /** De-emphasis for folded "Other" rows (3.05:1 on white). */
@@ -17,9 +17,9 @@ export const CHART = {
   gridline: '#EEE8DC',
   baseline: '#CFC6B2',
   /** Text roles */
-  ink: '#17210E',
-  inkSecondary: '#4A5240',
-  axisText: '#5E6654',
+  ink: '#0F1F1D',
+  inkSecondary: '#3F4F4C',
+  axisText: '#56625F',
   deltaUp: '#146C43',
   deltaDown: '#B42318',
 } as const

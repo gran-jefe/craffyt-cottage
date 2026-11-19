@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { BrandLogo } from '@/components/BrandLogo'
 import { ShoppingBag, Menu, X } from 'lucide-react'
 import { useCart } from '@/context/CartContext'
 import { isDemoMode } from '@/lib/firebase'
@@ -33,13 +34,8 @@ export function SiteHeader() {
         </p>
       )}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
-        <Link href="/" className="min-h-[44px] min-w-0 flex flex-col justify-center">
-          <span className="whitespace-nowrap font-serif-display font-semibold text-xl sm:text-[22px] leading-none tracking-[-0.01em] text-[#111B07]">
-            Crafty Cottage
-          </span>
-          <span className="hidden min-[360px]:block whitespace-nowrap text-[11px] uppercase tracking-[0.2em] text-[#4A5240] mt-1">
-            Bead to perfection
-          </span>
+        <Link href="/" aria-label="Crafty Cottage home" className="min-h-[44px] min-w-0 flex items-center text-[#0B3D3A]">
+          <BrandLogo className="text-[19px] sm:text-[21px]" title="Crafty Cottage" />
         </Link>
 
         <nav className="hidden md:flex items-center gap-1" aria-label="Main navigation">
@@ -47,7 +43,7 @@ export function SiteHeader() {
             <Link
               key={item.href}
               href={item.href}
-              className="min-h-[44px] px-3.5 rounded-lg text-sm font-medium text-[#4A5240] hover:text-[#111B07] flex items-center transition-colors duration-150"
+              className="min-h-[44px] px-3.5 rounded-lg text-sm font-medium text-[#3F4F4C] hover:text-[#04201F] flex items-center transition-colors duration-150"
             >
               {item.label}
             </Link>
@@ -59,14 +55,14 @@ export function SiteHeader() {
             type="button"
             onClick={() => setDrawerOpen(true)}
             aria-label={`Open shopping bag, ${totalCount} ${totalCount === 1 ? 'item' : 'items'}`}
-            className="relative min-h-[44px] min-w-[44px] px-2.5 sm:px-3 rounded-xl text-[#17210E] hover:bg-[#F4EFE6] active:bg-[#E8DEC8] text-sm font-medium flex items-center justify-center gap-2 transition-colors duration-150"
+            className="relative min-h-[44px] min-w-[44px] px-2.5 sm:px-3 rounded-xl text-[#0F1F1D] hover:bg-[#F4EFE6] active:bg-[#E8DEC8] text-sm font-medium flex items-center justify-center gap-2 transition-colors duration-150"
           >
             <ShoppingBag className="w-5 h-5" aria-hidden="true" />
             <span className="hidden sm:inline">Bag</span>
             {totalCount > 0 && (
               <span
                 aria-hidden="true"
-                className="absolute top-1 right-0.5 sm:static min-w-[18px] h-[18px] px-1 rounded-full bg-[#263E0F] text-white text-[11px] font-semibold grid place-items-center tabular-nums"
+                className="absolute top-1 right-0.5 sm:static min-w-[18px] h-[18px] px-1 rounded-full bg-[#0B3D3A] text-white text-[11px] font-semibold grid place-items-center tabular-nums"
               >
                 {totalCount}
               </span>
@@ -79,7 +75,7 @@ export function SiteHeader() {
             aria-label={mobileOpen ? 'Close navigation menu' : 'Open navigation menu'}
             aria-expanded={mobileOpen}
             aria-controls="mobile-nav"
-            className="md:hidden min-w-[44px] min-h-[44px] rounded-xl text-[#17210E] flex items-center justify-center hover:bg-[#F4EFE6] active:bg-[#E8DEC8] transition-colors duration-150"
+            className="md:hidden min-w-[44px] min-h-[44px] rounded-xl text-[#0F1F1D] flex items-center justify-center hover:bg-[#F4EFE6] active:bg-[#E8DEC8] transition-colors duration-150"
           >
             {mobileOpen ? <X className="w-5 h-5" aria-hidden="true" /> : <Menu className="w-5 h-5" aria-hidden="true" />}
           </button>
@@ -98,7 +94,7 @@ export function SiteHeader() {
                 <Link
                   href={item.href}
                   onClick={() => setMobileOpen(false)}
-                  className="min-h-[52px] flex items-center font-serif-display text-lg text-[#111B07]"
+                  className="min-h-[52px] flex items-center font-serif-display text-lg text-[#04201F]"
                 >
                   {item.label}
                 </Link>

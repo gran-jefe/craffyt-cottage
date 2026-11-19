@@ -122,10 +122,10 @@ export function AdminSettings({ initialSettings, locked = false, onRefresh }: Pr
   return (
     <form onSubmit={handleSave} className="space-y-6 max-w-3xl">
       <div>
-        <h2 className="font-serif-display text-2xl font-bold text-[#17210E]">
+        <h2 className="font-serif-display text-2xl font-bold text-[#0F1F1D]">
           Bank account and delivery settings
         </h2>
-        <p className="text-xs text-[#4A5240]">
+        <p className="text-xs text-[#3F4F4C]">
           Update the bank transfer account details and delivery zone fees displayed to customers at checkout.
         </p>
       </div>
@@ -139,7 +139,7 @@ export function AdminSettings({ initialSettings, locked = false, onRefresh }: Pr
 
       {/* Bank Details */}
       <section className="bg-white rounded-2xl border border-[#E2DACA] p-5 sm:p-6 space-y-4">
-        <h3 className="font-serif-display text-lg font-bold text-[#17210E]">
+        <h3 className="font-serif-display text-lg font-bold text-[#0F1F1D]">
           Bank transfer details
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -193,7 +193,7 @@ export function AdminSettings({ initialSettings, locked = false, onRefresh }: Pr
 
       {/* Contact */}
       <section className="bg-white rounded-2xl border border-[#E2DACA] p-5 sm:p-6 space-y-4">
-        <h3 className="font-serif-display text-lg font-bold text-[#17210E]">
+        <h3 className="font-serif-display text-lg font-bold text-[#0F1F1D]">
           Contact details
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -229,7 +229,7 @@ export function AdminSettings({ initialSettings, locked = false, onRefresh }: Pr
       {/* Delivery Zones */}
       <section className="bg-white rounded-2xl border border-[#E2DACA] p-5 sm:p-6 space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="font-serif-display text-lg font-bold text-[#17210E]">
+          <h3 className="font-serif-display text-lg font-bold text-[#0F1F1D]">
             Delivery zones and fees
           </h3>
           <button
@@ -243,7 +243,7 @@ export function AdminSettings({ initialSettings, locked = false, onRefresh }: Pr
                 ],
               })
             }
-            className="min-h-[44px] px-3 rounded-lg border border-[#263E0F] text-[#263E0F] text-xs font-bold flex items-center gap-1"
+            className="min-h-[44px] px-3 rounded-lg border border-[#0B3D3A] text-[#0B3D3A] text-xs font-bold flex items-center gap-1"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add zone</span>
@@ -319,7 +319,7 @@ export function AdminSettings({ initialSettings, locked = false, onRefresh }: Pr
             <h3
               id="bank-confirm-title"
               tabIndex={-1}
-              className="font-serif-display text-lg font-bold text-[#17210E] rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#263E0F]"
+              className="font-serif-display text-lg font-bold text-[#0F1F1D] rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0B3D3A]"
             >
               Confirm the new bank account
             </h3>
@@ -330,22 +330,22 @@ export function AdminSettings({ initialSettings, locked = false, onRefresh }: Pr
           </div>
           <dl className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 rounded-xl bg-white border border-amber-200 text-sm">
             {initialSettings.accountNumber && (
-              <div className="sm:col-span-3 text-xs text-[#4A5240]">
+              <div className="sm:col-span-3 text-xs text-[#3F4F4C]">
                 Replacing {initialSettings.bankName} · {initialSettings.accountName} ·{' '}
                 <span className="tabular-nums">{initialSettings.accountNumber}</span>
               </div>
             )}
             <div>
-              <dt className="text-xs text-[#4A5240]">Bank</dt>
-              <dd className="font-bold text-[#17210E]">{form.bankName.trim()}</dd>
+              <dt className="text-xs text-[#3F4F4C]">Bank</dt>
+              <dd className="font-bold text-[#0F1F1D]">{form.bankName.trim()}</dd>
             </div>
             <div>
-              <dt className="text-xs text-[#4A5240]">Account name</dt>
-              <dd className="font-bold text-[#17210E]">{form.accountName.trim()}</dd>
+              <dt className="text-xs text-[#3F4F4C]">Account name</dt>
+              <dd className="font-bold text-[#0F1F1D]">{form.accountName.trim()}</dd>
             </div>
             <div>
-              <dt className="text-xs text-[#4A5240]">Account number</dt>
-              <dd className="text-xl font-extrabold tracking-wider tabular-nums text-[#263E0F]">
+              <dt className="text-xs text-[#3F4F4C]">Account number</dt>
+              <dd className="text-xl font-extrabold tracking-wider tabular-nums text-[#0B3D3A]">
                 {form.accountNumber.trim()}
               </dd>
             </div>
@@ -354,7 +354,7 @@ export function AdminSettings({ initialSettings, locked = false, onRefresh }: Pr
             <button
               type="submit"
               disabled={saving || locked}
-              className="min-h-[48px] px-6 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-sm font-bold inline-flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="min-h-[48px] px-6 rounded-xl bg-[#0B3D3A] hover:bg-[#04201F] text-white text-sm font-bold inline-flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 text-[#E6C975]" />}
               <span>{saving ? 'Saving…' : 'Yes, use this account'}</span>
@@ -366,7 +366,7 @@ export function AdminSettings({ initialSettings, locked = false, onRefresh }: Pr
                 setConfirmingBank(false)
                 document.getElementById('set-acc-num')?.focus()
               }}
-              className="min-h-[48px] px-5 rounded-xl border border-[#8C8270] bg-white text-sm font-bold text-[#17210E] hover:bg-[#F4EFE6] disabled:opacity-60"
+              className="min-h-[48px] px-5 rounded-xl border border-[#8C8270] bg-white text-sm font-bold text-[#0F1F1D] hover:bg-[#F4EFE6] disabled:opacity-60"
             >
               Go back and edit
             </button>
@@ -376,7 +376,7 @@ export function AdminSettings({ initialSettings, locked = false, onRefresh }: Pr
         <button
           type="submit"
           disabled={saving || locked}
-          className="min-h-[48px] px-7 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-sm font-bold inline-flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+          className="min-h-[48px] px-7 rounded-xl bg-[#0B3D3A] hover:bg-[#04201F] text-white text-sm font-bold inline-flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 text-[#E6C975]" />}
           <span>{saving ? 'Saving settings...' : bankChanged ? 'Review and save' : 'Save settings'}</span>

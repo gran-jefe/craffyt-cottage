@@ -13,6 +13,7 @@ import {
 } from 'firebase/auth'
 import { Lock, Loader2, AlertTriangle, Eye, EyeOff } from 'lucide-react'
 import { auth, isFirebaseConfigured } from '@/lib/firebase'
+import { BrandLogo } from '@/components/BrandLogo'
 import {
   checkAdminAccess,
   fetchBespokeRequests,
@@ -45,7 +46,7 @@ export default function AdminPortalPage() {
     <Suspense
       fallback={
         <div className="min-h-screen bg-[#FAF8F4] flex items-center justify-center">
-          <Loader2 className="w-7 h-7 animate-spin text-[#263E0F]" />
+          <Loader2 className="w-7 h-7 animate-spin text-[#0B3D3A]" />
         </div>
       }
     >
@@ -197,7 +198,7 @@ function AdminPortal() {
   if (authLoading) {
     return (
       <div className="min-h-screen bg-[#FAF8F4] flex items-center justify-center">
-        <Loader2 className="w-7 h-7 animate-spin text-[#263E0F]" />
+        <Loader2 className="w-7 h-7 animate-spin text-[#0B3D3A]" />
       </div>
     )
   }
@@ -207,15 +208,14 @@ function AdminPortal() {
     return (
       <main className="min-h-screen bg-[#FAF8F4] flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-2xl border border-[#E2DACA] p-7 sm:p-8 space-y-6 shadow-sm">
-          <div className="flex items-center gap-3">
-            <span className="w-11 h-11 rounded-xl bg-[#263E0F] text-[#E6C975] grid place-items-center">
-              <Lock className="w-5 h-5" />
-            </span>
+          <div className="flex flex-col items-center gap-4 text-center">
+            <BrandLogo className="text-[26px] text-[#0B3D3A]" />
             <div>
-              <h1 className="font-serif-display text-2xl font-bold text-[#17210E]">
-                Crafty Cottage admin
+              <h1 className="inline-flex items-center gap-1.5 font-serif-display text-xl font-bold text-[#0F1F1D]">
+                <Lock className="w-4 h-4 text-[#12564F]" aria-hidden="true" />
+                Admin sign in
               </h1>
-              <p className="text-xs text-[#4A5240]">Sign in to manage bags, stock &amp; orders</p>
+              <p className="text-xs text-[#3F4F4C]">Manage bags, stock, orders and expenses</p>
             </div>
           </div>
 
@@ -278,7 +278,7 @@ function AdminPortal() {
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                   aria-pressed={showPassword}
                   aria-controls="admin-pass"
-                  className="absolute right-0 top-0 min-w-[44px] min-h-[44px] rounded-r-xl flex items-center justify-center text-[#4A5240] hover:text-[#17210E] hover:bg-[#F4EFE6] active:bg-[#E8DEC8] transition-colors"
+                  className="absolute right-0 top-0 min-w-[44px] min-h-[44px] rounded-r-xl flex items-center justify-center text-[#3F4F4C] hover:text-[#0F1F1D] hover:bg-[#F4EFE6] active:bg-[#E8DEC8] transition-colors"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -294,7 +294,7 @@ function AdminPortal() {
             <button
               type="submit"
               disabled={loggingIn || googleLoggingIn}
-              className="w-full min-h-[48px] rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-60"
+              className="w-full min-h-[48px] rounded-xl bg-[#0B3D3A] hover:bg-[#04201F] text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-60"
             >
               {loggingIn && <Loader2 className="w-4 h-4 animate-spin" />}
               <span>{loggingIn ? 'Signing in...' : 'Sign in'}</span>
@@ -303,7 +303,7 @@ function AdminPortal() {
 
           <div className="relative flex items-center">
             <div className="flex-grow border-t border-[#E2DACA]" />
-            <span className="px-3 text-xs font-semibold uppercase tracking-wider text-[#4A5240]">
+            <span className="px-3 text-xs font-semibold uppercase tracking-wider text-[#3F4F4C]">
               or
             </span>
             <div className="flex-grow border-t border-[#E2DACA]" />
@@ -313,10 +313,10 @@ function AdminPortal() {
             type="button"
             onClick={handleGoogleLogin}
             disabled={loggingIn || googleLoggingIn}
-            className="w-full min-h-[48px] rounded-xl border border-[#E2DACA] bg-white hover:bg-[#FAF8F4] text-[#17210E] text-sm font-bold flex items-center justify-center gap-2.5 disabled:opacity-60 transition-colors"
+            className="w-full min-h-[48px] rounded-xl border border-[#E2DACA] bg-white hover:bg-[#FAF8F4] text-[#0F1F1D] text-sm font-bold flex items-center justify-center gap-2.5 disabled:opacity-60 transition-colors"
           >
             {googleLoggingIn ? (
-              <Loader2 className="w-4 h-4 animate-spin text-[#263E0F]" />
+              <Loader2 className="w-4 h-4 animate-spin text-[#0B3D3A]" />
             ) : (
               <svg className="w-4 h-4" viewBox="0 0 24 24" aria-hidden="true">
                 <path
@@ -341,7 +341,7 @@ function AdminPortal() {
           </button>
 
           <div className="pt-2 border-t border-[#E2DACA] text-center">
-            <Link href="/" className="text-xs font-semibold text-[#4A5240] hover:text-[#263E0F]">
+            <Link href="/" className="text-xs font-semibold text-[#3F4F4C] hover:text-[#0B3D3A]">
               Back to the shop
             </Link>
           </div>
@@ -394,7 +394,7 @@ function AdminPortal() {
           id="admin-main"
           tabIndex={-1}
           aria-busy={loadingData}
-          className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#263E0F]"
+          className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#0B3D3A]"
         >
           <h1 className="sr-only">{SECTION_LABELS[section]}, Crafty Cottage admin</h1>
 
@@ -415,7 +415,7 @@ function AdminPortal() {
                   href={sectionHref('settings')}
                   scroll={false}
                   onClick={onSidebarNavigate}
-                  className="min-h-[44px] px-4 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-xs font-bold inline-flex items-center"
+                  className="min-h-[44px] px-4 rounded-xl bg-[#0B3D3A] hover:bg-[#04201F] text-white text-xs font-bold inline-flex items-center"
                 >
                   Add bank details
                 </Link>
@@ -449,7 +449,7 @@ function AdminPortal() {
               view mounted so filters, unsaved notes and scroll position survive. */}
           {!hasLoaded ? (
             <div className="py-16 flex justify-center">
-              <Loader2 className="w-7 h-7 animate-spin text-[#263E0F]" />
+              <Loader2 className="w-7 h-7 animate-spin text-[#0B3D3A]" />
             </div>
           ) : section === 'overview' ? (
             <AdminOverview

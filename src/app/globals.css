@@ -12,18 +12,18 @@
 }
 
 :root {
-  --forest-950: #111B07;
-  --forest-900: #1A2A0C;
-  --forest-800: #263E0F;
-  --forest-700: #355416;
-  --forest-100: #EAF2DE;
+  --forest-950: #04201F;
+  --forest-900: #062E2C;
+  --forest-800: #0B3D3A;
+  --forest-700: #12564F;
+  --forest-100: #E3F0EE;
   --linen-50: #FAF8F4;
   --linen-100: #F4EFE6;
   --linen-200: #E8DEC8;
   --gold-400: #E6C975;
   --gold-600: #8A6A12;
-  --ink: #17210E;
-  --ink-2: #4A5240;
+  --ink: #0F1F1D;
+  --ink-2: #3F4F4C;
   --line: #E2DACA;
 }
 
@@ -78,4 +78,13 @@ label:has(> input[type='file']:focus-visible) {
 }
 .no-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+/* Hero backdrop: the deep teal of the logo with a soft silk sheen, echoing the brand image.
+   The one place the storefront uses a gradient. */
+.hero-silk {
+  background:
+    radial-gradient(120% 90% at 12% 0%, rgb(255 255 255 / 0.08), transparent 55%),
+    radial-gradient(80% 70% at 100% 100%, rgb(0 0 0 / 0.28), transparent 60%),
+    linear-gradient(160deg, #0b3d3a 0%, #062e2c 55%, #04201f 100%);
 }

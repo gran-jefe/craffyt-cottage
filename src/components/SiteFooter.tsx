@@ -1,13 +1,14 @@
 import React from 'react'
 import Link from 'next/link'
+import { BrandLogo } from '@/components/BrandLogo'
 
 export function SiteFooter() {
   return (
-    <footer className="bg-[#111B07] text-[#CFC6B2] py-12 sm:py-14">
+    <footer className="bg-[#04201F] text-[#CFC6B2] py-12 sm:py-14">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-start sm:items-end justify-between gap-8">
-        <div>
-          <div className="font-serif-display font-semibold text-2xl text-white">Crafty Cottage</div>
-          <p className="mt-2 text-sm leading-relaxed">Hand-beaded bags and accessories, made in Nigeria.</p>
+        <div className="flex flex-col items-start gap-4">
+          <BrandLogo className="text-2xl text-white" />
+          <p className="text-sm leading-relaxed">Hand-beaded bags and accessories, made in Nigeria.</p>
         </div>
 
         <nav aria-label="Footer navigation" className="flex flex-wrap gap-x-6 text-sm font-medium">
@@ -23,7 +24,7 @@ export function SiteFooter() {
         </nav>
       </div>
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
-        <p className="mt-8 pt-6 border-t border-[#3A5222] text-xs text-[#CFC6B2]/80">
+        <p className="mt-8 pt-6 border-t border-[#1F5550] text-xs text-[#CFC6B2]/80">
           © 2026 Crafty Cottage. All rights reserved.
         </p>
       </div>

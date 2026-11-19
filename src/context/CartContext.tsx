@@ -238,7 +238,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             className={`pointer-events-auto flex items-center gap-2.5 max-w-sm w-full px-4 py-3.5 rounded-xl text-sm font-medium shadow-xl border ${
               toast.tone === 'error'
                 ? 'bg-[#7A1B14] text-white border-red-400/30'
-                : 'bg-[#111B07] text-[#FAF8F4] border-[#E6C975]/30'
+                : 'bg-[#04201F] text-[#FAF8F4] border-[#E6C975]/30'
             }`}
           >
             {toast.tone === 'error' ? (

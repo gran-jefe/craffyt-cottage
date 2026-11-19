@@ -30,7 +30,7 @@ export function BarList({ rows, label, max, emptyText }: Props) {
   const scale = max ?? Math.max(0, ...rows.map((r) => r.value))
 
   if (rows.length === 0 || scale <= 0) {
-    return <p className="py-6 text-sm text-[#4A5240] text-center">{emptyText}</p>
+    return <p className="py-6 text-sm text-[#3F4F4C] text-center">{emptyText}</p>
   }
 
   return (
@@ -42,13 +42,13 @@ export function BarList({ rows, label, max, emptyText }: Props) {
             <div className="flex items-baseline justify-between gap-3 text-sm">
               <span
                 title={row.label}
-                className={`min-w-0 truncate ${row.muted ? 'text-[#4A5240]' : 'font-semibold text-[#17210E]'}`}
+                className={`min-w-0 truncate ${row.muted ? 'text-[#3F4F4C]' : 'font-semibold text-[#0F1F1D]'}`}
               >
                 {row.label}
               </span>
-              <span className="shrink-0 tabular-nums text-[#17210E]">
+              <span className="shrink-0 tabular-nums text-[#0F1F1D]">
                 <span className="font-semibold">{row.valueLabel}</span>
-                {row.detail && <span className="ml-2 text-xs text-[#4A5240]">{row.detail}</span>}
+                {row.detail && <span className="ml-2 text-xs text-[#3F4F4C]">{row.detail}</span>}
               </span>
             </div>
             <div aria-hidden="true" className="h-2.5">

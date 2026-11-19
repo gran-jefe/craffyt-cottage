@@ -12,7 +12,8 @@ const playfair = Playfair_Display({
 
 const jakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
-  weight: ['400', '500', '600', '700', '800'],
+  // 300 is the light "CRAFTY" in the logo.
+  weight: ['300', '400', '500', '600', '700', '800'],
   variable: '--font-sans',
 })
 

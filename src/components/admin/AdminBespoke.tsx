@@ -16,7 +16,7 @@ interface Props {
 const STATUS_BADGES: Record<BespokeStatus, string> = {
   new: 'bg-amber-100 text-amber-900',
   quoted: 'bg-sky-100 text-sky-900',
-  in_progress: 'bg-[#EAF2DE] text-[#263E0F]',
+  in_progress: 'bg-[#E3F0EE] text-[#0B3D3A]',
   completed: 'bg-emerald-100 text-emerald-900',
 }
 
@@ -40,21 +40,21 @@ export function AdminBespoke({ requests, onRefresh }: Props) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-serif-display text-2xl font-bold text-[#17210E]">
+        <h2 className="font-serif-display text-2xl font-bold text-[#0F1F1D]">
           Bespoke requests
         </h2>
-        <p className="text-xs text-[#4A5240]">
+        <p className="text-xs text-[#3F4F4C]">
           Custom colour &amp; silhouette specs submitted through the custom bag form.
         </p>
       </div>
 
       {requests.length === 0 ? (
         <div className="bg-white rounded-2xl border border-[#E2DACA] p-10 text-center space-y-2">
-          <Sparkles className="w-8 h-8 text-[#4A5240] mx-auto opacity-60" />
-          <p className="font-serif-display text-lg font-bold text-[#17210E]">
+          <Sparkles className="w-8 h-8 text-[#3F4F4C] mx-auto opacity-60" />
+          <p className="font-serif-display text-lg font-bold text-[#0F1F1D]">
             No custom requests yet
           </p>
-          <p className="text-sm text-[#4A5240]">
+          <p className="text-sm text-[#3F4F4C]">
             When shoppers submit custom colour specifications on the storefront, they will appear here.
           </p>
         </div>
@@ -70,10 +70,10 @@ export function AdminBespoke({ requests, onRefresh }: Props) {
               >
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <h3 className="font-serif-display text-lg font-bold text-[#17210E]">
+                    <h3 className="font-serif-display text-lg font-bold text-[#0F1F1D]">
                       {req.customerName}
                     </h3>
-                    <p className="text-xs text-[#4A5240]">{formatPhone(req.customerPhone)}</p>
+                    <p className="text-xs text-[#3F4F4C]">{formatPhone(req.customerPhone)}</p>
                   </div>
                   <span
                     className={`text-xs font-bold px-2.5 py-0.5 rounded-md capitalize ${STATUS_BADGES[req.status]}`}
@@ -84,19 +84,19 @@ export function AdminBespoke({ requests, onRefresh }: Props) {
 
                 <div className="bg-[#FAF8F4] rounded-xl p-3 border border-[#E2DACA] text-xs space-y-1">
                   <div className="flex justify-between">
-                    <span className="text-[#4A5240]">Shape:</span>
-                    <strong className="text-[#17210E]">{req.shape}</strong>
+                    <span className="text-[#3F4F4C]">Shape:</span>
+                    <strong className="text-[#0F1F1D]">{req.shape}</strong>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-[#4A5240]">Bead finish:</span>
-                    <strong className="text-[#17210E]">{req.beadColour}</strong>
+                    <span className="text-[#3F4F4C]">Bead finish:</span>
+                    <strong className="text-[#0F1F1D]">{req.beadColour}</strong>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-[#4A5240]">Estimate:</span>
-                    <strong className="text-[#263E0F]">{formatNaira(req.estimatedPrice)}</strong>
+                    <span className="text-[#3F4F4C]">Estimate:</span>
+                    <strong className="text-[#0B3D3A]">{formatNaira(req.estimatedPrice)}</strong>
                   </div>
                   {req.notes && (
-                    <p className="pt-1.5 mt-1.5 border-t border-[#E2DACA] text-[#4A5240]">
+                    <p className="pt-1.5 mt-1.5 border-t border-[#E2DACA] text-[#3F4F4C]">
                       <strong>Notes:</strong> {req.notes}
                     </p>
                   )}
@@ -123,7 +123,7 @@ export function AdminBespoke({ requests, onRefresh }: Props) {
                       )}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="min-h-[44px] px-3.5 rounded-xl bg-[#263E0F] text-white text-xs font-bold flex items-center gap-1.5"
+                      className="min-h-[44px] px-3.5 rounded-xl bg-[#0B3D3A] text-white text-xs font-bold flex items-center gap-1.5"
                     >
                       <MessageCircle className="w-3.5 h-3.5 text-[#E6C975]" />
                       <span>Reply on WhatsApp</span>

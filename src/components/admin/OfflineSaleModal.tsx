@@ -287,7 +287,7 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-[#111B07]/65 backdrop-blur-xs flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-[#04201F]/65 backdrop-blur-xs flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="offline-sale-modal-title"
@@ -300,10 +300,10 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
       >
         <div className="flex items-center justify-between border-b border-[#E2DACA] pb-3">
           <div>
-            <h3 id="offline-sale-modal-title" className="font-serif-display text-xl font-bold text-[#17210E]">
+            <h3 id="offline-sale-modal-title" className="font-serif-display text-xl font-bold text-[#0F1F1D]">
               Record an offline sale
             </h3>
-            <p className="text-xs text-[#4A5240]">
+            <p className="text-xs text-[#3F4F4C]">
               Log an in-person, pop-up market, or DM purchase and optionally deduct inventory.
             </p>
           </div>
@@ -312,7 +312,7 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
             onClick={onClose}
             disabled={saving}
             aria-label="Close offline purchase dialog"
-            className="min-w-[44px] min-h-[44px] rounded-xl border border-[#E2DACA] flex items-center justify-center focus-visible:ring-2 focus-visible:ring-[#263E0F] outline-none"
+            className="min-w-[44px] min-h-[44px] rounded-xl border border-[#E2DACA] flex items-center justify-center focus-visible:ring-2 focus-visible:ring-[#0B3D3A] outline-none"
           >
             <X className="w-4 h-4" />
           </button>
@@ -322,13 +322,13 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
           {/* Items Purchased */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-[#355416]">
+              <span className="text-xs font-bold uppercase tracking-wider text-[#12564F]">
                 Products bought *
               </span>
               <button
                 type="button"
                 onClick={addLine}
-                className="min-h-[44px] px-3 rounded-lg border border-[#263E0F]/40 text-[#263E0F] hover:bg-[#EAF2DE] text-xs font-bold flex items-center gap-1"
+                className="min-h-[44px] px-3 rounded-lg border border-[#0B3D3A]/40 text-[#0B3D3A] hover:bg-[#E3F0EE] text-xs font-bold flex items-center gap-1"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add item</span>
@@ -449,12 +449,12 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
 
             {hasCatalogItems && (
               <div className="space-y-1">
-                <label className="flex items-center gap-2.5 text-xs font-semibold text-[#17210E] cursor-pointer">
+                <label className="flex items-center gap-2.5 text-xs font-semibold text-[#0F1F1D] cursor-pointer">
                   <input
                     type="checkbox"
                     checked={deductStock}
                     onChange={(e) => setDeductStock(e.target.checked)}
-                    className="w-4 h-4 accent-[#263E0F]"
+                    className="w-4 h-4 accent-[#0B3D3A]"
                   />
                   <span>Deduct sold quantities from inventory stock</span>
                 </label>
@@ -612,12 +612,12 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
               <span className="block text-xs font-bold mb-1">Receipt or POS slip (optional)</span>
               <label
                 htmlFor="offline-receipt-upload"
-                className="min-h-[44px] px-3.5 rounded-xl border border-[#E2DACA] bg-[#FAF8F4] hover:border-[#263E0F] text-xs font-semibold text-[#17210E] flex items-center gap-2 cursor-pointer"
+                className="min-h-[44px] px-3.5 rounded-xl border border-[#E2DACA] bg-[#FAF8F4] hover:border-[#0B3D3A] text-xs font-semibold text-[#0F1F1D] flex items-center gap-2 cursor-pointer"
               >
                 {uploadingReceipt ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-[#263E0F]" />
+                  <Loader2 className="w-4 h-4 animate-spin text-[#0B3D3A]" />
                 ) : (
-                  <Upload className="w-4 h-4 text-[#263E0F]" />
+                  <Upload className="w-4 h-4 text-[#0B3D3A]" />
                 )}
                 <span className="truncate">
                   {uploadingReceipt
@@ -639,19 +639,19 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
 
           {/* Totals Summary */}
           <div className="bg-[#FAF8F4] border border-[#E2DACA] rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="text-xs text-[#4A5240] space-x-3">
+            <div className="text-xs text-[#3F4F4C] space-x-3">
               <span>
-                Items subtotal: <strong className="text-[#17210E] tabular-nums">{formatNaira(subtotal)}</strong>
+                Items subtotal: <strong className="text-[#0F1F1D] tabular-nums">{formatNaira(subtotal)}</strong>
               </span>
               {numericFee > 0 && (
                 <span>
-                  Delivery: <strong className="text-[#17210E] tabular-nums">{formatNaira(numericFee)}</strong>
+                  Delivery: <strong className="text-[#0F1F1D] tabular-nums">{formatNaira(numericFee)}</strong>
                 </span>
               )}
             </div>
             <div className="text-right">
-              <span className="text-xs text-[#4A5240] block">Total recorded sale</span>
-              <strong className="font-serif-display text-xl font-bold text-[#263E0F] tabular-nums">
+              <span className="text-xs text-[#3F4F4C] block">Total recorded sale</span>
+              <strong className="font-serif-display text-xl font-bold text-[#0B3D3A] tabular-nums">
                 {formatNaira(total)}
               </strong>
             </div>
@@ -675,7 +675,7 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
             <button
               type="submit"
               disabled={saving || uploadingReceipt}
-              className="min-h-[44px] px-6 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-xs font-bold flex items-center gap-2 disabled:opacity-60"
+              className="min-h-[44px] px-6 rounded-xl bg-[#0B3D3A] hover:bg-[#04201F] text-white text-xs font-bold flex items-center gap-2 disabled:opacity-60"
             >
               {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               <span>{saving ? 'Saving...' : 'Save offline sale'}</span>

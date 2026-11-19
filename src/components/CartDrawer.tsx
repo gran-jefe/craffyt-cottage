@@ -32,7 +32,7 @@ export function CartDrawer() {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-[#111B07]/60 backdrop-blur-xs flex justify-end"
+      className="fixed inset-0 z-50 bg-[#04201F]/60 backdrop-blur-xs flex justify-end"
       role="dialog"
       aria-modal="true"
       aria-labelledby="cart-drawer-title"
@@ -46,8 +46,8 @@ export function CartDrawer() {
         {/* Header */}
         <div className="px-5 py-4 border-b border-[#E2DACA] flex items-center justify-between bg-white">
           <div className="flex items-center gap-2.5">
-            <ShoppingBag className="w-5 h-5 text-[#263E0F]" />
-            <h2 id="cart-drawer-title" className="font-serif-display text-lg font-bold text-[#17210E]">
+            <ShoppingBag className="w-5 h-5 text-[#0B3D3A]" />
+            <h2 id="cart-drawer-title" className="font-serif-display text-lg font-bold text-[#0F1F1D]">
               Your shopping bag ({totalCount})
             </h2>
           </div>
@@ -55,7 +55,7 @@ export function CartDrawer() {
             type="button"
             onClick={() => setDrawerOpen(false)}
             aria-label="Close shopping bag"
-            className="min-w-[44px] min-h-[44px] rounded-xl border border-[#E2DACA] text-[#4A5240] hover:text-[#17210E] hover:bg-[#F4EFE6] flex items-center justify-center transition-colors"
+            className="min-w-[44px] min-h-[44px] rounded-xl border border-[#E2DACA] text-[#3F4F4C] hover:text-[#0F1F1D] hover:bg-[#F4EFE6] flex items-center justify-center transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -65,21 +65,21 @@ export function CartDrawer() {
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           {items.length === 0 ? (
             <div className="h-72 flex flex-col items-center justify-center text-center px-4 space-y-4">
-              <div className="w-14 h-14 rounded-2xl bg-[#EAF2DE] text-[#263E0F] flex items-center justify-center">
+              <div className="w-14 h-14 rounded-2xl bg-[#E3F0EE] text-[#0B3D3A] flex items-center justify-center">
                 <ShoppingBag className="w-7 h-7" />
               </div>
               <div className="space-y-1">
-                <p className="font-serif-display text-lg font-bold text-[#17210E]">
+                <p className="font-serif-display text-lg font-bold text-[#0F1F1D]">
                   Your bag is empty
                 </p>
-                <p className="text-sm text-[#4A5240]">
+                <p className="text-sm text-[#3F4F4C]">
                   Browse the Prima collection or create a bespoke bag in your event colours.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setDrawerOpen(false)}
-                className="min-h-[44px] px-5 rounded-xl bg-[#263E0F] text-white text-sm font-semibold hover:bg-[#111B07] transition-colors"
+                className="min-h-[44px] px-5 rounded-xl bg-[#0B3D3A] text-white text-sm font-semibold hover:bg-[#04201F] transition-colors"
               >
                 Explore the collection
               </button>
@@ -96,13 +96,13 @@ export function CartDrawer() {
                   className="w-20 h-20 rounded-xl object-cover bg-[#E8DEC8] shrink-0"
                 />
                 <div className="flex-1 min-w-0 space-y-1">
-                  <h3 className="font-serif-display text-base font-bold text-[#17210E] truncate">
+                  <h3 className="font-serif-display text-base font-bold text-[#0F1F1D] truncate">
                     {item.name}
                   </h3>
                   {item.variantLabel && (
-                    <p className="text-xs text-[#4A5240]">{item.variantLabel}</p>
+                    <p className="text-xs text-[#3F4F4C]">{item.variantLabel}</p>
                   )}
-                  <p className="text-sm font-bold text-[#263E0F]">
+                  <p className="text-sm font-bold text-[#0B3D3A]">
                     {formatNaira(item.price)}
                   </p>
                   <div className="flex items-center gap-2 pt-1">
@@ -130,7 +130,7 @@ export function CartDrawer() {
                       type="button"
                       onClick={() => removeItem(cartLineKey(item))}
                       aria-label={`Remove ${item.name}${item.variantLabel ? ` (${item.variantLabel})` : ''}`}
-                      className="ml-auto min-w-[44px] min-h-[44px] rounded-lg text-[#4A5240] hover:text-[#B42318] hover:bg-red-50 flex items-center justify-center"
+                      className="ml-auto min-w-[44px] min-h-[44px] rounded-lg text-[#3F4F4C] hover:text-[#B42318] hover:bg-red-50 flex items-center justify-center"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -145,18 +145,18 @@ export function CartDrawer() {
         {items.length > 0 && (
           <div className="p-5 bg-white border-t border-[#E2DACA] space-y-3">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-[#4A5240] font-medium">Subtotal</span>
-              <span className="font-serif-display text-xl font-bold text-[#17210E] tabular-nums">
+              <span className="text-[#3F4F4C] font-medium">Subtotal</span>
+              <span className="font-serif-display text-xl font-bold text-[#0F1F1D] tabular-nums">
                 {formatNaira(subtotal)}
               </span>
             </div>
-            <p className="text-xs text-[#4A5240]">
+            <p className="text-xs text-[#3F4F4C]">
               Delivery zone and bank transfer receipt upload are completed at checkout.
             </p>
             <Link
               href="/checkout"
               onClick={() => setDrawerOpen(false)}
-              className="w-full min-h-[48px] rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-sm font-bold flex items-center justify-center gap-2 transition-colors shadow-sm"
+              className="w-full min-h-[48px] rounded-xl bg-[#0B3D3A] hover:bg-[#04201F] text-white text-sm font-bold flex items-center justify-center gap-2 transition-colors shadow-sm"
             >
               <span>Proceed to checkout</span>
               <ArrowRight className="w-4 h-4" />
