@@ -256,30 +256,30 @@ export default function CheckoutPage() {
         <div className="max-w-5xl mx-auto px-4 sm:px-6">
           {completedOrder ? (
             <div className="max-w-xl mx-auto bg-white rounded-2xl border border-[#E2DACA] p-7 sm:p-10 text-center space-y-6 shadow-sm">
-              <div className="w-16 h-16 rounded-2xl bg-[#EAF2DE] text-[#146C43] mx-auto flex items-center justify-center">
+              <div className="w-16 h-16 rounded-2xl bg-[#E3F0EE] text-[#146C43] mx-auto flex items-center justify-center">
                 <CheckCircle2 className="w-9 h-9" />
               </div>
 
               <div className="space-y-2">
-                <span className="text-xs font-bold uppercase tracking-widest text-[#355416]">
+                <span className="text-xs font-bold uppercase tracking-widest text-[#12564F]">
                   Order received
                 </span>
-                <h1 className="font-serif-display text-3xl font-bold text-[#111B07]">
+                <h1 className="font-serif-display text-3xl font-bold text-[#04201F]">
                   Thank you, {completedOrder.customerName}!
                 </h1>
-                <p className="text-sm text-[#4A5240] leading-relaxed">
+                <p className="text-sm text-[#3F4F4C] leading-relaxed">
                   Your order and transfer receipt have been submitted. Crafty Cottage will confirm your payment shortly and begin preparing your piece.
                 </p>
               </div>
 
               <div className="bg-[#FAF8F4] border border-[#E2DACA] rounded-2xl p-5 space-y-2">
-                <span className="text-xs font-semibold text-[#4A5240] block">
+                <span className="text-xs font-semibold text-[#3F4F4C] block">
                   Your order reference code
                 </span>
-                <div className="text-2xl sm:text-3xl font-extrabold tracking-wider text-[#263E0F] tabular-nums">
+                <div className="text-2xl sm:text-3xl font-extrabold tracking-wider text-[#0B3D3A] tabular-nums">
                   {completedOrder.orderCode}
                 </div>
-                <p className="text-xs text-[#4A5240]">
+                <p className="text-xs text-[#3F4F4C]">
                   Total amount: <strong>{formatNaira(completedOrder.total)}</strong> ·{' '}
                   {completedOrder.deliveryZone}
                 </p>
@@ -288,7 +288,7 @@ export default function CheckoutPage() {
               <div className="flex flex-col sm:flex-row gap-3 pt-2">
                 <Link
                   href={`/track?code=${encodeURIComponent(completedOrder.orderCode)}`}
-                  className="flex-1 min-h-[48px] px-5 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-sm font-bold flex items-center justify-center transition-colors"
+                  className="flex-1 min-h-[48px] px-5 rounded-xl bg-[#0B3D3A] hover:bg-[#04201F] text-white text-sm font-bold flex items-center justify-center transition-colors"
                 >
                   Track order status
                 </Link>
@@ -298,7 +298,7 @@ export default function CheckoutPage() {
                   )}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex-1 min-h-[48px] px-5 rounded-xl border border-[#263E0F] text-[#263E0F] hover:bg-[#EAF2DE] text-sm font-bold flex items-center justify-center gap-2 transition-colors"
+                  className="flex-1 min-h-[48px] px-5 rounded-xl border border-[#0B3D3A] text-[#0B3D3A] hover:bg-[#E3F0EE] text-sm font-bold flex items-center justify-center gap-2 transition-colors"
                 >
                   <MessageCircle className="w-4 h-4" />
                   <span>Let us know on WhatsApp</span>
@@ -307,20 +307,20 @@ export default function CheckoutPage() {
             </div>
           ) : items.length === 0 ? (
             <div className="max-w-lg mx-auto bg-white rounded-2xl border border-[#E2DACA] p-10 text-center space-y-5">
-              <div className="w-14 h-14 rounded-2xl bg-[#EAF2DE] text-[#263E0F] mx-auto flex items-center justify-center">
+              <div className="w-14 h-14 rounded-2xl bg-[#E3F0EE] text-[#0B3D3A] mx-auto flex items-center justify-center">
                 <ShoppingBag className="w-7 h-7" />
               </div>
               <div className="space-y-1.5">
-                <h1 className="font-serif-display text-2xl font-bold text-[#17210E]">
+                <h1 className="font-serif-display text-2xl font-bold text-[#0F1F1D]">
                   Your bag is empty
                 </h1>
-                <p className="text-sm text-[#4A5240]">
+                <p className="text-sm text-[#3F4F4C]">
                   Add a beaded bag from the Prima collection before heading to checkout.
                 </p>
               </div>
               <Link
                 href="/#shop"
-                className="inline-flex items-center justify-center min-h-[48px] px-6 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-sm font-bold transition-colors"
+                className="inline-flex items-center justify-center min-h-[48px] px-6 rounded-xl bg-[#0B3D3A] hover:bg-[#04201F] text-white text-sm font-bold transition-colors"
               >
                 Browse the collection
               </Link>
@@ -330,15 +330,15 @@ export default function CheckoutPage() {
               <div className="space-y-2">
                 <Link
                   href="/#shop"
-                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#4A5240] hover:text-[#263E0F] py-1"
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#3F4F4C] hover:text-[#0B3D3A] py-1"
                 >
                   <ArrowLeft className="w-4 h-4" />
                   <span>Continue shopping</span>
                 </Link>
-                <h1 className="font-serif-display text-3xl sm:text-4xl font-bold text-[#111B07]">
+                <h1 className="font-serif-display text-3xl sm:text-4xl font-bold text-[#04201F]">
                   Checkout and bank transfer
                 </h1>
-                <p className="text-sm text-[#4A5240]">
+                <p className="text-sm text-[#3F4F4C]">
                   Pay directly into Crafty Cottage&apos;s bank account and upload your transfer receipt to lock in your order.
                 </p>
               </div>
@@ -373,13 +373,13 @@ export default function CheckoutPage() {
               <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start" noValidate>
                 <div className="lg:col-span-7 space-y-6">
                   <section className="bg-white rounded-2xl border border-[#E2DACA] p-5 sm:p-6 space-y-4">
-                    <h2 className="font-serif-display text-xl font-bold text-[#17210E]">
+                    <h2 className="font-serif-display text-xl font-bold text-[#0F1F1D]">
                       1. Delivery details
                     </h2>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <label htmlFor="customerName" className="block text-xs font-bold text-[#17210E] mb-1">
+                        <label htmlFor="customerName" className="block text-xs font-bold text-[#0F1F1D] mb-1">
                           Full name *
                         </label>
                         <input
@@ -402,7 +402,7 @@ export default function CheckoutPage() {
                       </div>
 
                       <div>
-                        <label htmlFor="customerPhone" className="block text-xs font-bold text-[#17210E] mb-1">
+                        <label htmlFor="customerPhone" className="block text-xs font-bold text-[#0F1F1D] mb-1">
                           Phone or WhatsApp number *
                         </label>
                         <input
@@ -423,7 +423,7 @@ export default function CheckoutPage() {
                         {errors.customerPhone ? (
                         <p id="customerPhone-error" className="text-xs text-[#B42318] mt-1 leading-relaxed">{errors.customerPhone}</p>
                         ) : (
-                        <p id="customerPhone-hint" className="text-xs text-[#4A5240] mt-1 leading-relaxed">
+                        <p id="customerPhone-hint" className="text-xs text-[#3F4F4C] mt-1 leading-relaxed">
                           Outside Nigeria? Start with + and your country code.
                         </p>
                         )}
@@ -431,8 +431,8 @@ export default function CheckoutPage() {
                     </div>
 
                     <div>
-                      <label htmlFor="customerEmail" className="block text-xs font-bold text-[#17210E] mb-1">
-                        Email address <span className="font-normal text-[#4A5240]">(optional)</span>
+                      <label htmlFor="customerEmail" className="block text-xs font-bold text-[#0F1F1D] mb-1">
+                        Email address <span className="font-normal text-[#3F4F4C]">(optional)</span>
                       </label>
                       <input
                         id="customerEmail"
@@ -456,7 +456,7 @@ export default function CheckoutPage() {
                     </div>
 
                     <div>
-                      <label htmlFor="deliveryZone" className="block text-xs font-bold text-[#17210E] mb-1">
+                      <label htmlFor="deliveryZone" className="block text-xs font-bold text-[#0F1F1D] mb-1">
                         Delivery location *
                       </label>
                       <select
@@ -474,7 +474,7 @@ export default function CheckoutPage() {
                     </div>
 
                     <div>
-                      <label htmlFor="address" className="block text-xs font-bold text-[#17210E] mb-1">
+                      <label htmlFor="address" className="block text-xs font-bold text-[#0F1F1D] mb-1">
                         Delivery address, hostel or landmark *
                       </label>
                       <textarea
@@ -497,8 +497,8 @@ export default function CheckoutPage() {
                     </div>
 
                     <div>
-                      <label htmlFor="notes" className="block text-xs font-bold text-[#17210E] mb-1">
-                        Delivery instructions <span className="font-normal text-[#4A5240]">(optional)</span>
+                      <label htmlFor="notes" className="block text-xs font-bold text-[#0F1F1D] mb-1">
+                        Delivery instructions <span className="font-normal text-[#3F4F4C]">(optional)</span>
                       </label>
                       <input
                         id="notes"
@@ -514,10 +514,10 @@ export default function CheckoutPage() {
                   <section className="bg-white rounded-2xl border border-[#E2DACA] p-5 sm:p-6 space-y-5">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <h2 className="font-serif-display text-xl font-bold text-[#17210E]">
+                        <h2 className="font-serif-display text-xl font-bold text-[#0F1F1D]">
                           2. Direct bank transfer
                         </h2>
-                        <p className="text-xs text-[#4A5240] mt-0.5">
+                        <p className="text-xs text-[#3F4F4C] mt-0.5">
                           {paymentReady ? (
                             <>Transfer <strong>{formatNaira(total)}</strong> to the account below, then upload your receipt.</>
                           ) : (
@@ -525,18 +525,18 @@ export default function CheckoutPage() {
                           )}
                         </p>
                       </div>
-                      <Landmark className="w-6 h-6 text-[#263E0F] shrink-0" />
+                      <Landmark className="w-6 h-6 text-[#0B3D3A] shrink-0" />
                     </div>
 
                     {paymentStatus === 'loading' && (
                       <div
                         role="status"
                         aria-label="Loading bank details"
-                        className="bg-[#1A2A0C] rounded-2xl p-5 space-y-3 animate-pulse"
+                        className="bg-[#062E2C] rounded-2xl p-5 space-y-3 animate-pulse"
                       >
-                        <div className="h-4 w-1/3 rounded-md bg-[#3A5222]" />
-                        <div className="h-4 w-1/2 rounded-md bg-[#3A5222]" />
-                        <div className="h-8 w-2/3 rounded-md bg-[#3A5222]" />
+                        <div className="h-4 w-1/3 rounded-md bg-[#1F5550]" />
+                        <div className="h-4 w-1/2 rounded-md bg-[#1F5550]" />
+                        <div className="h-8 w-2/3 rounded-md bg-[#1F5550]" />
                       </div>
                     )}
 
@@ -560,7 +560,7 @@ export default function CheckoutPage() {
                             <button
                               type="button"
                               onClick={() => setSettingsReloadKey((k) => k + 1)}
-                              className="min-h-[44px] px-4 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-xs font-bold transition-colors"
+                              className="min-h-[44px] px-4 rounded-xl bg-[#0B3D3A] hover:bg-[#04201F] text-white text-xs font-bold transition-colors"
                             >
                               Try again
                             </button>
@@ -571,7 +571,7 @@ export default function CheckoutPage() {
                             )}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="min-h-[44px] px-4 rounded-xl border border-[#263E0F] text-[#263E0F] hover:bg-amber-100 text-xs font-bold inline-flex items-center gap-1.5 transition-colors"
+                            className="min-h-[44px] px-4 rounded-xl border border-[#0B3D3A] text-[#0B3D3A] hover:bg-amber-100 text-xs font-bold inline-flex items-center gap-1.5 transition-colors"
                           >
                             <MessageCircle className="w-4 h-4" />
                             <span>Message us on WhatsApp</span>
@@ -581,7 +581,7 @@ export default function CheckoutPage() {
                     )}
 
                     {paymentReady && (
-                    <div className="bg-[#1A2A0C] text-[#FAF8F4] rounded-2xl p-5 space-y-3">
+                    <div className="bg-[#062E2C] text-[#FAF8F4] rounded-2xl p-5 space-y-3">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                         <div>
                           <span className="text-xs text-[#CFC6B2] block">Bank name</span>
@@ -593,7 +593,7 @@ export default function CheckoutPage() {
                         </div>
                       </div>
 
-                      <div className="pt-3 border-t border-[#3A5222] flex items-center justify-between gap-3">
+                      <div className="pt-3 border-t border-[#1F5550] flex items-center justify-between gap-3">
                         <div>
                           <span className="text-xs text-[#CFC6B2] block">Account number</span>
                           <strong className="text-2xl font-extrabold tracking-wider text-[#E6C975] tabular-nums">
@@ -603,7 +603,7 @@ export default function CheckoutPage() {
                         <button
                           type="button"
                           onClick={handleCopyAccount}
-                          className="min-h-[44px] px-4 rounded-xl bg-[#263E0F] hover:bg-[#355416] border border-[#E6C975]/40 text-xs font-bold text-white flex items-center gap-1.5 transition-colors"
+                          className="min-h-[44px] px-4 rounded-xl bg-[#0B3D3A] hover:bg-[#12564F] border border-[#E6C975]/40 text-xs font-bold text-white flex items-center gap-1.5 transition-colors"
                         >
                           {copiedAccount ? <Check className="w-4 h-4 text-[#B8F0CF]" /> : <Copy className="w-4 h-4" />}
                           <span>{copiedAccount ? 'Copied' : 'Copy'}</span>
@@ -613,18 +613,18 @@ export default function CheckoutPage() {
                     )}
 
                     <div>
-                      <label htmlFor="receipt-upload" className="block text-xs font-bold text-[#17210E] mb-2">
+                      <label htmlFor="receipt-upload" className="block text-xs font-bold text-[#0F1F1D] mb-2">
                         Payment receipt (screenshot or PDF) *
                       </label>
                       <label
                         htmlFor="receipt-upload"
-                        className={`flex flex-col items-center justify-center gap-2 p-6 rounded-2xl border-2 border-dashed ${errors.receipt ? 'border-[#B42318]' : 'border-[#8C8270]'} hover:border-[#263E0F] bg-[#FAF8F4] cursor-pointer transition-colors text-center`}
+                        className={`flex flex-col items-center justify-center gap-2 p-6 rounded-2xl border-2 border-dashed ${errors.receipt ? 'border-[#B42318]' : 'border-[#8C8270]'} hover:border-[#0B3D3A] bg-[#FAF8F4] cursor-pointer transition-colors text-center`}
                       >
-                        <Upload className="w-6 h-6 text-[#263E0F]" />
-                        <span className="text-sm font-bold text-[#17210E]">
+                        <Upload className="w-6 h-6 text-[#0B3D3A]" />
+                        <span className="text-sm font-bold text-[#0F1F1D]">
                           {receiptFile ? receiptFile.name : 'Tap to choose receipt image or PDF'}
                         </span>
-                        <span id="receipt-hint" className="text-xs text-[#4A5240]">
+                        <span id="receipt-hint" className="text-xs text-[#3F4F4C]">
                           JPG or PNG up to 10 MB · PDF up to {formatFileSize(RECEIPT_PDF_MAX_BYTES)}
                         </span>
                         <input
@@ -648,16 +648,16 @@ export default function CheckoutPage() {
                             alt="Uploaded receipt preview"
                             className="w-16 h-16 rounded-lg object-cover border border-[#E2DACA]"
                           />
-                          <div className="text-xs text-[#17210E]">
+                          <div className="text-xs text-[#0F1F1D]">
                             <p className="font-bold">Receipt ready to attach</p>
-                            <p className="text-[#4A5240]">{receiptFile?.name}</p>
+                            <p className="text-[#3F4F4C]">{receiptFile?.name}</p>
                           </div>
                         </div>
                       )}
 
                       {!receiptPreview && receiptFile && (
-                        <div className="mt-3 flex items-center gap-2.5 p-3 rounded-xl bg-[#F4EFE6] border border-[#E2DACA] text-xs font-semibold text-[#17210E]">
-                          <FileText className="w-4 h-4 text-[#263E0F]" />
+                        <div className="mt-3 flex items-center gap-2.5 p-3 rounded-xl bg-[#F4EFE6] border border-[#E2DACA] text-xs font-semibold text-[#0F1F1D]">
+                          <FileText className="w-4 h-4 text-[#0B3D3A]" />
                           <span>{receiptFile.name}</span>
                         </div>
                       )}
@@ -670,7 +670,7 @@ export default function CheckoutPage() {
                 </div>
 
                 <aside className="lg:col-span-5 bg-white rounded-2xl border border-[#E2DACA] p-5 sm:p-6 space-y-5 lg:sticky lg:top-24">
-                  <h2 className="font-serif-display text-xl font-bold text-[#17210E] border-b border-[#E2DACA] pb-3">
+                  <h2 className="font-serif-display text-xl font-bold text-[#0F1F1D] border-b border-[#E2DACA] pb-3">
                     Order summary
                   </h2>
 
@@ -684,13 +684,13 @@ export default function CheckoutPage() {
                             className="w-12 h-12 rounded-lg object-cover bg-[#E8DEC8] shrink-0"
                           />
                           <div className="min-w-0">
-                            <p className="font-bold text-[#17210E] truncate">{item.name}</p>
-                            <p className="text-xs text-[#4A5240]">
+                            <p className="font-bold text-[#0F1F1D] truncate">{item.name}</p>
+                            <p className="text-xs text-[#3F4F4C]">
                               {item.variantLabel ? `${item.variantLabel} · ` : ''}Qty: {item.quantity}
                             </p>
                           </div>
                         </div>
-                        <span className="font-bold text-[#17210E] tabular-nums shrink-0">
+                        <span className="font-bold text-[#0F1F1D] tabular-nums shrink-0">
                           {formatNaira(item.price * item.quantity)}
                         </span>
                       </li>
@@ -698,21 +698,21 @@ export default function CheckoutPage() {
                   </ul>
 
                   <div className="pt-4 border-t border-[#E2DACA] space-y-2 text-sm">
-                    <div className="flex justify-between text-[#4A5240]">
+                    <div className="flex justify-between text-[#3F4F4C]">
                       <span>Items subtotal</span>
-                      <span className="font-semibold text-[#17210E] tabular-nums">
+                      <span className="font-semibold text-[#0F1F1D] tabular-nums">
                         {formatNaira(subtotal)}
                       </span>
                     </div>
-                    <div className="flex justify-between text-[#4A5240]">
+                    <div className="flex justify-between text-[#3F4F4C]">
                       <span>Delivery ({selectedZone?.label.split(' ')[0]})</span>
-                      <span className="font-semibold text-[#17210E] tabular-nums">
+                      <span className="font-semibold text-[#0F1F1D] tabular-nums">
                         {deliveryFee === 0 ? 'Free' : formatNaira(deliveryFee)}
                       </span>
                     </div>
                     <div className="pt-3 border-t border-[#E2DACA] flex justify-between items-baseline">
-                      <span className="font-bold text-[#17210E]">Total to pay</span>
-                      <span className="font-serif-display text-2xl font-bold text-[#263E0F] tabular-nums">
+                      <span className="font-bold text-[#0F1F1D]">Total to pay</span>
+                      <span className="font-serif-display text-2xl font-bold text-[#0B3D3A] tabular-nums">
                         {formatNaira(total)}
                       </span>
                     </div>
@@ -728,7 +728,7 @@ export default function CheckoutPage() {
                     type="submit"
                     disabled={submitting || !paymentReady}
                     aria-describedby={paymentReady ? undefined : 'payment-paused-hint'}
-                    className="w-full min-h-[48px] px-5 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-sm font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-60 disabled:cursor-not-allowed shadow-sm"
+                    className="w-full min-h-[48px] px-5 rounded-xl bg-[#0B3D3A] hover:bg-[#04201F] text-white text-sm font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-60 disabled:cursor-not-allowed shadow-sm"
                   >
                     {submitting ? (
                       <>
@@ -743,7 +743,7 @@ export default function CheckoutPage() {
                     )}
                   </button>
                   {!paymentReady && (
-                    <p id="payment-paused-hint" className="text-xs text-[#4A5240] text-center">
+                    <p id="payment-paused-hint" className="text-xs text-[#3F4F4C] text-center">
                       {paymentStatus === 'loading'
                         ? 'Loading our bank details…'
                         : 'Ordering is paused until our bank details are available.'}

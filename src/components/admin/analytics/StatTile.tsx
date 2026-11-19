@@ -19,11 +19,11 @@ export function StatTile({ label, metric, format, compareLabel, upIsGood = true 
   let delta: React.ReactNode
 
   if (compareLabel === null || metric.previous === null) {
-    delta = <span className="text-[#4A5240]">No earlier period to compare</span>
+    delta = <span className="text-[#3F4F4C]">No earlier period to compare</span>
   } else if (change === null) {
     // Previous period was zero: a percentage would be infinite, so say it plainly.
     delta = (
-      <span className="text-[#4A5240]">
+      <span className="text-[#3F4F4C]">
         {metric.value > 0 ? 'Up from nothing' : metric.value < 0 ? 'Down from nothing' : 'None in either period'} {compareLabel}
       </span>
     )
@@ -42,15 +42,15 @@ export function StatTile({ label, metric, format, compareLabel, upIsGood = true 
           <Icon className="w-3.5 h-3.5" aria-hidden="true" />
           {text}
         </span>
-        <span className="text-[#4A5240]">{compareLabel}</span>
+        <span className="text-[#3F4F4C]">{compareLabel}</span>
       </span>
     )
   }
 
   return (
     <div className="bg-white p-4 sm:p-5 space-y-1">
-      <p className="text-xs font-semibold text-[#4A5240]">{label}</p>
-      <p className="text-2xl sm:text-[28px] leading-tight font-bold text-[#17210E]">{format(metric.value)}</p>
+      <p className="text-xs font-semibold text-[#3F4F4C]">{label}</p>
+      <p className="text-2xl sm:text-[28px] leading-tight font-bold text-[#0F1F1D]">{format(metric.value)}</p>
       <p className="text-xs leading-relaxed">{delta}</p>
     </div>
   )

@@ -199,10 +199,10 @@ export function AdminOverview({ orders, products, bespoke, expenses, expensesErr
 
       <section aria-labelledby="analytics-heading" className="space-y-5">
         <div>
-          <h2 id="analytics-heading" className="font-serif-display text-2xl font-bold text-[#17210E]">
+          <h2 id="analytics-heading" className="font-serif-display text-2xl font-bold text-[#0F1F1D]">
             Sales analytics
           </h2>
-          <p className="text-xs text-[#4A5240]">
+          <p className="text-xs text-[#3F4F4C]">
             {data.range.rangeLabel} · Nigeria time
           </p>
         </div>
@@ -210,14 +210,14 @@ export function AdminOverview({ orders, products, bespoke, expenses, expensesErr
         {/* Filters: one row, above everything they scope */}
         <div role="group" aria-label="Dashboard filters" className="flex flex-wrap items-end gap-3">
           <div>
-            <label htmlFor="dash-period" className="block text-xs font-bold text-[#17210E] mb-1">
+            <label htmlFor="dash-period" className="block text-xs font-bold text-[#0F1F1D] mb-1">
               Period
             </label>
             <select
               id="dash-period"
               value={filters.preset}
               onChange={(e) => update({ preset: e.target.value as PeriodPreset })}
-              className="min-h-[44px] pl-3 pr-8 rounded-xl border border-[#8C8270] bg-white text-sm font-semibold text-[#17210E]"
+              className="min-h-[44px] pl-3 pr-8 rounded-xl border border-[#8C8270] bg-white text-sm font-semibold text-[#0F1F1D]"
             >
               {(Object.keys(PERIOD_LABELS) as PeriodPreset[]).map((p) => (
                 <option key={p} value={p}>
@@ -230,7 +230,7 @@ export function AdminOverview({ orders, products, bespoke, expenses, expensesErr
           {filters.preset === 'custom' && (
             <>
               <div>
-                <label htmlFor="dash-from" className="block text-xs font-bold text-[#17210E] mb-1">
+                <label htmlFor="dash-from" className="block text-xs font-bold text-[#0F1F1D] mb-1">
                   From
                 </label>
                 <input
@@ -245,7 +245,7 @@ export function AdminOverview({ orders, products, bespoke, expenses, expensesErr
                 />
               </div>
               <div>
-                <label htmlFor="dash-to" className="block text-xs font-bold text-[#17210E] mb-1">
+                <label htmlFor="dash-to" className="block text-xs font-bold text-[#0F1F1D] mb-1">
                   To
                 </label>
                 <input
@@ -264,7 +264,7 @@ export function AdminOverview({ orders, products, bespoke, expenses, expensesErr
           )}
 
           <fieldset>
-            <legend className="block text-xs font-bold text-[#17210E] mb-1">Channel</legend>
+            <legend className="block text-xs font-bold text-[#0F1F1D] mb-1">Channel</legend>
             <div className="inline-flex rounded-xl border border-[#8C8270] bg-white overflow-hidden">
               {CHANNEL_OPTIONS.map((o) => {
                 const checked = filters.channel === o.value
@@ -272,7 +272,7 @@ export function AdminOverview({ orders, products, bespoke, expenses, expensesErr
                   <label
                     key={o.value}
                     className={`min-h-[44px] px-4 inline-flex items-center text-sm font-semibold cursor-pointer transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-4 has-[:focus-visible]:outline-[#E6C975] ${
-                      checked ? 'bg-[#263E0F] text-white' : 'text-[#4A5240] hover:bg-[#F4EFE6] hover:text-[#17210E]'
+                      checked ? 'bg-[#0B3D3A] text-white' : 'text-[#3F4F4C] hover:bg-[#F4EFE6] hover:text-[#0F1F1D]'
                     }`}
                   >
                     <input
@@ -294,7 +294,7 @@ export function AdminOverview({ orders, products, bespoke, expenses, expensesErr
             <button
               type="button"
               onClick={() => setFilters(DEFAULT_FILTERS)}
-              className="min-h-[44px] px-3 rounded-xl text-xs font-bold text-[#4A5240] hover:text-[#17210E] hover:bg-[#F4EFE6] inline-flex items-center gap-1.5 transition-colors"
+              className="min-h-[44px] px-3 rounded-xl text-xs font-bold text-[#3F4F4C] hover:text-[#0F1F1D] hover:bg-[#F4EFE6] inline-flex items-center gap-1.5 transition-colors"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Reset filters</span>
@@ -315,16 +315,16 @@ export function AdminOverview({ orders, products, bespoke, expenses, expensesErr
         >
           {!hasAnyOrders ? (
             <div className="bg-white rounded-2xl border border-[#E2DACA] p-10 text-center space-y-3">
-              <LineChart className="w-8 h-8 mx-auto text-[#4A5240]" aria-hidden="true" />
-              <p className="font-serif-display text-lg font-bold text-[#17210E]">No sales to analyse yet</p>
-              <p className="text-sm text-[#4A5240] max-w-md mx-auto leading-relaxed">
+              <LineChart className="w-8 h-8 mx-auto text-[#3F4F4C]" aria-hidden="true" />
+              <p className="font-serif-display text-lg font-bold text-[#0F1F1D]">No sales to analyse yet</p>
+              <p className="text-sm text-[#3F4F4C] max-w-md mx-auto leading-relaxed">
                 Once a customer checks out or you record an offline sale, your sales, best sellers and trends
                 will show up here.
               </p>
               <button
                 type="button"
                 onClick={() => onNavigate('orders')}
-                className="min-h-[44px] px-5 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-sm font-bold transition-colors"
+                className="min-h-[44px] px-5 rounded-xl bg-[#0B3D3A] hover:bg-[#04201F] text-white text-sm font-bold transition-colors"
               >
                 Go to orders
               </button>
@@ -368,8 +368,8 @@ export function AdminOverview({ orders, products, bespoke, expenses, expensesErr
                   />
                 ) : (
                   <div className="py-10 text-center space-y-3">
-                    <p className="text-sm font-semibold text-[#17210E]">No verified sales in this period</p>
-                    <p className="text-sm text-[#4A5240]">
+                    <p className="text-sm font-semibold text-[#0F1F1D]">No verified sales in this period</p>
+                    <p className="text-sm text-[#3F4F4C]">
                       {attention.pendingCount > 0
                         ? `${attention.pendingCount} ${attention.pendingCount === 1 ? 'order is' : 'orders are'} waiting for payment verification.`
                         : 'Try a longer period, or check the channel filter.'}
@@ -378,7 +378,7 @@ export function AdminOverview({ orders, products, bespoke, expenses, expensesErr
                       <button
                         type="button"
                         onClick={() => update({ preset: 'all' })}
-                        className="min-h-[44px] px-4 rounded-xl border border-[#263E0F] text-[#263E0F] hover:bg-[#EAF2DE] text-xs font-bold transition-colors"
+                        className="min-h-[44px] px-4 rounded-xl border border-[#0B3D3A] text-[#0B3D3A] hover:bg-[#E3F0EE] text-xs font-bold transition-colors"
                       >
                         Show all time
                       </button>
@@ -394,7 +394,7 @@ export function AdminOverview({ orders, products, bespoke, expenses, expensesErr
                   <button
                     type="button"
                     onClick={() => onNavigate('expenses')}
-                    className="min-h-[44px] px-4 rounded-xl border border-[#263E0F] text-[#263E0F] hover:bg-[#EAF2DE] text-xs font-bold inline-flex items-center gap-1.5 transition-colors"
+                    className="min-h-[44px] px-4 rounded-xl border border-[#0B3D3A] text-[#0B3D3A] hover:bg-[#E3F0EE] text-xs font-bold inline-flex items-center gap-1.5 transition-colors"
                   >
                     <Plus className="w-3.5 h-3.5" aria-hidden="true" />
                     <span>Record expense</span>
@@ -425,14 +425,14 @@ export function AdminOverview({ orders, products, bespoke, expenses, expensesErr
                       />
                     </div>
                     {filters.channel !== 'all' && (
-                      <p className="text-xs text-[#4A5240] leading-relaxed">
+                      <p className="text-xs text-[#3F4F4C] leading-relaxed">
                         Profit uses sales from every channel, because expenses aren&apos;t split between online and offline.
                       </p>
                     )}
                     {expenseRows.length > 0 ? (
                       <BarList rows={expenseRows} label="Expenses by category" emptyText="" />
                     ) : (
-                      <p className="text-sm text-[#4A5240] leading-relaxed">
+                      <p className="text-sm text-[#3F4F4C] leading-relaxed">
                         {expenses.length === 0
                           ? 'No expenses recorded yet, so profit equals sales. Record costs like beads, packaging and delivery to see your real profit.'
                           : 'No expenses fall in this period.'}
@@ -452,8 +452,8 @@ export function AdminOverview({ orders, products, bespoke, expenses, expensesErr
                   subtitle="Orders placed in this period, by their current status."
                   aside={
                     data.ordersPlaced > 0 ? (
-                      <span className="block text-xs text-[#4A5240] sm:text-right">
-                        <span className="block font-semibold text-[#17210E] tabular-nums">{data.ordersPlaced} placed</span>
+                      <span className="block text-xs text-[#3F4F4C] sm:text-right">
+                        <span className="block font-semibold text-[#0F1F1D] tabular-nums">{data.ordersPlaced} placed</span>
                         {Math.round((cancelled / data.ordersPlaced) * 100)}% cancelled
                       </span>
                     ) : undefined
@@ -479,8 +479,8 @@ export function AdminOverview({ orders, products, bespoke, expenses, expensesErr
                   subtitle="Requests received in this period. The channel filter doesn't apply."
                   aside={
                     data.bespoke.openValue > 0 ? (
-                      <span className="block text-xs text-[#4A5240] sm:text-right">
-                        <span className="block font-semibold text-[#17210E] tabular-nums">
+                      <span className="block text-xs text-[#3F4F4C] sm:text-right">
+                        <span className="block font-semibold text-[#0F1F1D] tabular-nums">
                           {formatNaira(data.bespoke.openValue)}
                         </span>
                         estimated, still open
@@ -497,7 +497,7 @@ export function AdminOverview({ orders, products, bespoke, expenses, expensesErr
                 </ChartCard>
               </div>
 
-              <p className="text-xs text-[#4A5240] leading-relaxed max-w-3xl">
+              <p className="text-xs text-[#3F4F4C] leading-relaxed max-w-3xl">
                 Sales count an order once its payment is verified (Payment confirmed through Delivered) and include
                 delivery fees. Pending and cancelled orders are left out. Offline sales are dated by their sale date.
                 Days run midnight to midnight, Nigeria time.
@@ -527,7 +527,7 @@ function AttentionStrip({
 
   return (
     <section aria-labelledby="attention-heading" className="space-y-3">
-      <h2 id="attention-heading" className="font-serif-display text-2xl font-bold text-[#17210E]">
+      <h2 id="attention-heading" className="font-serif-display text-2xl font-bold text-[#0F1F1D]">
         Needs attention
       </h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-px rounded-2xl border border-[#E2DACA] bg-[#E2DACA] overflow-hidden">
@@ -593,19 +593,19 @@ function AttentionItem({
           <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5 text-[#146C43]" aria-hidden="true" />
         )}
         <div className="min-w-0">
-          <p className="text-xs font-semibold text-[#4A5240]">{label}</p>
-          <p className="text-2xl font-bold text-[#17210E]">
+          <p className="text-xs font-semibold text-[#3F4F4C]">{label}</p>
+          <p className="text-2xl font-bold text-[#0F1F1D]">
             {count}
             <span className="sr-only">{needsAction ? ', needs attention' : ', all clear'}</span>
           </p>
-          <p className="text-xs text-[#4A5240] leading-relaxed">{detail}</p>
+          <p className="text-xs text-[#3F4F4C] leading-relaxed">{detail}</p>
         </div>
       </div>
       {action && (
         <button
           type="button"
           onClick={action.onClick}
-          className="mt-auto self-start min-h-[44px] px-4 rounded-xl border border-[#263E0F] text-[#263E0F] hover:bg-[#EAF2DE] text-xs font-bold transition-colors"
+          className="mt-auto self-start min-h-[44px] px-4 rounded-xl border border-[#0B3D3A] text-[#0B3D3A] hover:bg-[#E3F0EE] text-xs font-bold transition-colors"
         >
           {action.label}
         </button>

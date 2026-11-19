@@ -56,7 +56,7 @@ const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
 
 const STATUS_LABELS: Record<OrderStatus, { label: string; badge: string }> = {
   pending_verification: { label: 'Pending verification', badge: 'bg-amber-100 text-amber-900' },
-  payment_confirmed: { label: 'Payment confirmed', badge: 'bg-[#EAF2DE] text-[#263E0F]' },
+  payment_confirmed: { label: 'Payment confirmed', badge: 'bg-[#E3F0EE] text-[#0B3D3A]' },
   processing: { label: 'Processing', badge: 'bg-sky-100 text-sky-900' },
   dispatched: { label: 'Dispatched', badge: 'bg-purple-100 text-purple-900' },
   delivered: { label: 'Delivered', badge: 'bg-emerald-100 text-emerald-900' },
@@ -115,7 +115,7 @@ function PdfReceipt({ url, orderCode }: { url: string; orderCode: string }) {
       </p>
     )
   }
-  if (!viewUrl) return <Loader2 className="w-6 h-6 my-10 animate-spin text-[#263E0F]" />
+  if (!viewUrl) return <Loader2 className="w-6 h-6 my-10 animate-spin text-[#0B3D3A]" />
 
   return (
     <div className="w-full space-y-2">
@@ -128,7 +128,7 @@ function PdfReceipt({ url, orderCode }: { url: string; orderCode: string }) {
         href={viewUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="min-h-[44px] inline-flex items-center gap-1.5 px-2 text-sm font-bold text-[#263E0F] underline"
+        className="min-h-[44px] inline-flex items-center gap-1.5 px-2 text-sm font-bold text-[#0B3D3A] underline"
       >
         <ExternalLink className="w-4 h-4" />
         <span>Open PDF in a new tab</span>
@@ -246,9 +246,9 @@ function OrderActions({
   const dispatchNoteId = `order-dispatch-note-${order.id}`
 
   const primaryClass =
-    'min-h-[44px] px-4 rounded-xl bg-[#263E0F] hover:bg-[#111B07] active:bg-[#0B1204] text-white text-sm font-bold inline-flex items-center gap-2 transition-colors disabled:opacity-60 disabled:cursor-not-allowed'
+    'min-h-[44px] px-4 rounded-xl bg-[#0B3D3A] hover:bg-[#04201F] active:bg-[#021817] text-white text-sm font-bold inline-flex items-center gap-2 transition-colors disabled:opacity-60 disabled:cursor-not-allowed'
   const secondaryClass =
-    'min-h-[44px] px-3.5 rounded-xl border border-[#E2DACA] bg-white hover:border-[#263E0F] hover:bg-[#FAF8F4] text-xs font-bold text-[#17210E] inline-flex items-center gap-1.5 transition-colors'
+    'min-h-[44px] px-3.5 rounded-xl border border-[#E2DACA] bg-white hover:border-[#0B3D3A] hover:bg-[#FAF8F4] text-xs font-bold text-[#0F1F1D] inline-flex items-center gap-1.5 transition-colors'
 
   async function advance(next: OrderStatus) {
     if (await onStatusChange(next)) {
@@ -261,8 +261,8 @@ function OrderActions({
       {dispatching ? (
         <div className="p-3.5 rounded-xl bg-[#FAF8F4] border border-[#E2DACA] space-y-3">
           <div>
-            <label htmlFor={dispatchNoteId} className="block text-xs font-bold text-[#17210E] mb-1">
-              Rider or tracking note <span className="font-normal text-[#4A5240]">(optional)</span>
+            <label htmlFor={dispatchNoteId} className="block text-xs font-bold text-[#0F1F1D] mb-1">
+              Rider or tracking note <span className="font-normal text-[#3F4F4C]">(optional)</span>
             </label>
             <input
               id={dispatchNoteId}
@@ -275,7 +275,7 @@ function OrderActions({
               aria-describedby={`${dispatchNoteId}-hint`}
               className="w-full min-h-[44px] px-3 rounded-xl border border-[#8C8270] bg-white text-sm"
             />
-            <p id={`${dispatchNoteId}-hint`} className="mt-1 text-xs text-[#4A5240]">
+            <p id={`${dispatchNoteId}-hint`} className="mt-1 text-xs text-[#3F4F4C]">
               The customer sees this on their tracking page.
             </p>
           </div>
@@ -331,7 +331,7 @@ function OrderActions({
               rel="noopener noreferrer"
               className={secondaryClass}
             >
-              <MessageCircle className="w-3.5 h-3.5 text-[#263E0F]" />
+              <MessageCircle className="w-3.5 h-3.5 text-[#0B3D3A]" />
               <span>WhatsApp</span>
             </a>
           )}
@@ -341,7 +341,7 @@ function OrderActions({
             aria-expanded={moreOpen}
             aria-controls={morePanelId}
             onClick={() => setMoreOpen((o) => !o)}
-            className="ml-auto min-h-[44px] px-3 rounded-xl text-xs font-bold text-[#4A5240] hover:text-[#17210E] hover:bg-[#F4EFE6] inline-flex items-center gap-1 transition-colors"
+            className="ml-auto min-h-[44px] px-3 rounded-xl text-xs font-bold text-[#3F4F4C] hover:text-[#0F1F1D] hover:bg-[#F4EFE6] inline-flex items-center gap-1 transition-colors"
           >
             <span>More</span>
             <ChevronDown className={`w-4 h-4 transition-transform duration-150 ${moreOpen ? 'rotate-180' : ''}`} />
@@ -355,8 +355,8 @@ function OrderActions({
           className="grid grid-cols-1 md:grid-cols-12 gap-4 pt-3 border-t border-[#F4EFE6]"
         >
           <div className="md:col-span-7">
-            <label htmlFor={noteId} className="block text-xs font-bold text-[#17210E] mb-1">
-              Delivery note <span className="font-normal text-[#4A5240]">(shown on the tracking page)</span>
+            <label htmlFor={noteId} className="block text-xs font-bold text-[#0F1F1D] mb-1">
+              Delivery note <span className="font-normal text-[#3F4F4C]">(shown on the tracking page)</span>
             </label>
             <div className="flex gap-2">
               <input
@@ -380,7 +380,7 @@ function OrderActions({
           </div>
 
           <div className="md:col-span-5">
-            <label htmlFor={`order-status-${order.id}`} className="block text-xs font-bold text-[#17210E] mb-1">
+            <label htmlFor={`order-status-${order.id}`} className="block text-xs font-bold text-[#0F1F1D] mb-1">
               Correct the status
             </label>
             <select
@@ -401,7 +401,7 @@ function OrderActions({
                 </option>
               ))}
             </select>
-            <p id={`order-status-${order.id}-hint`} className="mt-1 text-xs text-[#4A5240]">
+            <p id={`order-status-${order.id}-hint`} className="mt-1 text-xs text-[#3F4F4C]">
               Only to fix a mistake. Moving to a paid status takes the items off stock if they aren’t already.
             </p>
           </div>
@@ -496,10 +496,10 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh, initia
     <div className="space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div>
-          <h2 className="font-serif-display text-2xl font-bold text-[#17210E]">
+          <h2 className="font-serif-display text-2xl font-bold text-[#0F1F1D]">
             Orders and offline sales
           </h2>
-          <p className="text-xs text-[#4A5240]">
+          <p className="text-xs text-[#3F4F4C]">
             Verify online transfer receipts, record offline walk-in or DM sales, and update delivery status.
           </p>
         </div>
@@ -533,7 +533,7 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh, initia
           <button
             type="button"
             onClick={() => setOfflineModalOpen(true)}
-            className="min-h-[44px] px-4 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-xs font-bold flex items-center gap-1.5 shadow-xs"
+            className="min-h-[44px] px-4 rounded-xl bg-[#0B3D3A] hover:bg-[#04201F] text-white text-xs font-bold flex items-center gap-1.5 shadow-xs"
           >
             <Plus className="w-4 h-4 text-[#E6C975]" />
             <span>Record offline sale</span>
@@ -543,11 +543,11 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh, initia
 
       {filtered.length === 0 ? (
         <div className="bg-white rounded-2xl border border-[#E2DACA] p-10 text-center space-y-3">
-          <Receipt className="w-8 h-8 text-[#4A5240] mx-auto opacity-60" />
-          <p className="font-serif-display text-lg font-bold text-[#17210E]">
+          <Receipt className="w-8 h-8 text-[#3F4F4C] mx-auto opacity-60" />
+          <p className="font-serif-display text-lg font-bold text-[#0F1F1D]">
             {orders.length === 0 ? 'No orders or offline sales yet' : 'No orders match this filter'}
           </p>
-          <p className="text-sm text-[#4A5240]">
+          <p className="text-sm text-[#3F4F4C]">
             {orders.length === 0
               ? 'Customer checkout orders will appear here, or you can log an in-person or DM purchase.'
               : 'Try resetting the channel or status filter, or record a new offline purchase.'}
@@ -560,7 +560,7 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh, initia
                   setFilterChannel('all')
                   setFilterStatus('all')
                 }}
-                className="min-h-[44px] px-4 rounded-xl border border-[#E2DACA] text-xs font-bold text-[#17210E]"
+                className="min-h-[44px] px-4 rounded-xl border border-[#E2DACA] text-xs font-bold text-[#0F1F1D]"
               >
                 Reset filters
               </button>
@@ -568,7 +568,7 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh, initia
             <button
               type="button"
               onClick={() => setOfflineModalOpen(true)}
-              className="min-h-[44px] px-5 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-xs font-bold inline-flex items-center gap-1.5"
+              className="min-h-[44px] px-5 rounded-xl bg-[#0B3D3A] hover:bg-[#04201F] text-white text-xs font-bold inline-flex items-center gap-1.5"
             >
               <Plus className="w-4 h-4 text-[#E6C975]" />
               <span>Record offline sale</span>
@@ -597,38 +597,38 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh, initia
                 <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#F4EFE6] pb-3">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-extrabold text-base text-[#263E0F] tracking-wide">
+                      <span className="font-extrabold text-base text-[#0B3D3A] tracking-wide">
                         {order.orderCode}
                       </span>
                       <span className={`text-xs font-bold px-2.5 py-0.5 rounded-md ${meta.badge}`}>
                         {meta.label}
                       </span>
                       {isOffline && (
-                        <span className="text-xs font-bold px-2.5 py-0.5 rounded-md bg-[#F4EFE6] text-[#263E0F] border border-[#E2DACA]">
+                        <span className="text-xs font-bold px-2.5 py-0.5 rounded-md bg-[#F4EFE6] text-[#0B3D3A] border border-[#E2DACA]">
                           Offline{order.paymentMethod ? ` · ${PAYMENT_METHOD_LABELS[order.paymentMethod]}` : ''}
                         </span>
                       )}
                     </div>
-                    <p className="text-sm font-bold text-[#17210E] mt-1">
+                    <p className="text-sm font-bold text-[#0F1F1D] mt-1">
                       {order.customerName}
                       {order.customerPhone && (
                         <>
                           {' '}
-                          · <span className="font-normal text-[#4A5240]">{formatPhone(order.customerPhone)}</span>
+                          · <span className="font-normal text-[#3F4F4C]">{formatPhone(order.customerPhone)}</span>
                         </>
                       )}
                     </p>
-                    <p className="text-xs text-[#4A5240]">
+                    <p className="text-xs text-[#3F4F4C]">
                       {zoneOrSource}
                       {order.address ? ` · ${order.address}` : ''}
                     </p>
                   </div>
 
                   <div className="text-left sm:text-right">
-                    <span className="text-xl font-serif-display font-bold text-[#17210E] tabular-nums block">
+                    <span className="text-xl font-serif-display font-bold text-[#0F1F1D] tabular-nums block">
                       {formatNaira(order.total)}
                     </span>
-                    <span className="text-xs text-[#4A5240]">
+                    <span className="text-xs text-[#3F4F4C]">
                       {new Date(order.createdAt).toLocaleString()}
                     </span>
                   </div>
@@ -637,12 +637,12 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh, initia
                 <TotalsWarning issues={totalIssues} />
 
                 {/* Ordered Items */}
-                <ul className="text-xs text-[#17210E] space-y-1 bg-[#FAF8F4] p-3 rounded-xl border border-[#E2DACA]">
+                <ul className="text-xs text-[#0F1F1D] space-y-1 bg-[#FAF8F4] p-3 rounded-xl border border-[#E2DACA]">
                   {order.items.map((item, idx) => (
                     <li key={idx} className="flex justify-between">
                       <span>
                         <strong>{item.quantity}x</strong> {item.name}
-                        {item.variantLabel && <span className="text-[#4A5240]"> · {item.variantLabel}</span>}
+                        {item.variantLabel && <span className="text-[#3F4F4C]"> · {item.variantLabel}</span>}
                       </span>
                       <span className="font-semibold tabular-nums">
                         {formatNaira(item.price * item.quantity)}
@@ -650,7 +650,7 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh, initia
                     </li>
                   ))}
                   {order.deliveryFee > 0 && (
-                    <li className="flex justify-between text-[#4A5240] pt-1 border-t border-[#E2DACA]/60">
+                    <li className="flex justify-between text-[#3F4F4C] pt-1 border-t border-[#E2DACA]/60">
                       <span>Delivery fee</span>
                       <span className="font-semibold tabular-nums">
                         {formatNaira(order.deliveryFee)}
@@ -658,7 +658,7 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh, initia
                     </li>
                   )}
                   {order.notes && (
-                    <li className="pt-1.5 mt-1.5 border-t border-[#E2DACA] text-[#4A5240]">
+                    <li className="pt-1.5 mt-1.5 border-t border-[#E2DACA] text-[#3F4F4C]">
                       <strong>Note:</strong> {order.notes}
                     </li>
                   )}
@@ -704,18 +704,18 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh, initia
                     </div>
 
                     {heldUnits > 0 && (
-                      <label className="flex items-start gap-2.5 min-h-[44px] p-2.5 -mx-1 rounded-lg bg-white/70 border border-red-100 cursor-pointer text-sm text-[#17210E]">
+                      <label className="flex items-start gap-2.5 min-h-[44px] p-2.5 -mx-1 rounded-lg bg-white/70 border border-red-100 cursor-pointer text-sm text-[#0F1F1D]">
                         <input
                           type="checkbox"
                           checked={restockOnCancel}
                           onChange={(e) => setRestockOnCancel(e.target.checked)}
-                          className="mt-0.5 w-4 h-4 accent-[#263E0F] shrink-0"
+                          className="mt-0.5 w-4 h-4 accent-[#0B3D3A] shrink-0"
                         />
                         <span>
                           <strong className="block">
                             Put {heldUnits} {heldUnits === 1 ? 'item' : 'items'} back in stock
                           </strong>
-                          <span className="text-xs text-[#4A5240]">
+                          <span className="text-xs text-[#3F4F4C]">
                             {order.status === 'delivered'
                               ? 'Only tick this if the customer has returned the bag to you.'
                               : 'Untick if the bag is damaged or no longer available to sell.'}
@@ -728,7 +728,7 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh, initia
                       <button
                         type="button"
                         onClick={() => setConfirmCancelId(null)}
-                        className="min-h-[44px] px-4 rounded-xl border border-[#E2DACA] bg-white text-xs font-bold text-[#17210E] hover:bg-[#F4EFE6]"
+                        className="min-h-[44px] px-4 rounded-xl border border-[#E2DACA] bg-white text-xs font-bold text-[#0F1F1D] hover:bg-[#F4EFE6]"
                       >
                         Keep order
                       </button>
@@ -756,7 +756,7 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh, initia
       {/* Receipt Inspection Modal */}
       {receiptModalOrder && (
         <div
-          className="fixed inset-0 z-50 bg-[#111B07]/75 backdrop-blur-xs flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-[#04201F]/75 backdrop-blur-xs flex items-center justify-center p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="receipt-modal-title"
@@ -772,7 +772,7 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh, initia
                 <h3 id="receipt-modal-title" className="font-serif-display text-lg font-bold">
                   Transfer receipt: {receiptModalOrder.orderCode}
                 </h3>
-                <p className="text-xs text-[#4A5240]">
+                <p className="text-xs text-[#3F4F4C]">
                   Expected amount: <strong>{formatNaira(receiptModalOrder.total)}</strong>
                 </p>
               </div>
@@ -811,7 +811,7 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh, initia
                     setReceiptModalOrder(null)
                   }
                 }}
-                className="w-full min-h-[44px] rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="w-full min-h-[44px] rounded-xl bg-[#0B3D3A] hover:bg-[#04201F] text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {updatingId === receiptModalOrder.id ? (
                   <Loader2 className="w-4 h-4 animate-spin" />

@@ -84,11 +84,11 @@ export function SalesChart({ buckets, series, granularity, totals: seriesTotals 
   return (
     <div className="space-y-3">
       {series.length > 1 && (
-        <ul className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-[#4A5240]" aria-label="Legend">
+        <ul className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-[#3F4F4C]" aria-label="Legend">
           {series.map((k) => (
             <li key={k} className="inline-flex items-center gap-2">
               <span aria-hidden="true" className="w-2.5 h-2.5 rounded-[2px]" style={{ background: SERIES_META[k].color }} />
-              <span className="font-semibold text-[#17210E]">{SERIES_META[k].label}</span>
+              <span className="font-semibold text-[#0F1F1D]">{SERIES_META[k].label}</span>
               {seriesTotals?.[k] !== undefined && (
                 <span className="tabular-nums">{formatNaira(seriesTotals[k]!)}</span>
               )}
@@ -107,7 +107,7 @@ export function SalesChart({ buckets, series, granularity, totals: seriesTotals 
         onFocus={() => setActive((a) => a ?? (n > 0 ? n - 1 : null))}
         onBlur={() => setActive(null)}
         onPointerLeave={() => setActive(null)}
-        className="relative rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#263E0F]"
+        className="relative rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0B3D3A]"
         style={{ height: HEIGHT }}
       >
         {width > 0 && (
@@ -218,20 +218,20 @@ export function SalesChart({ buckets, series, granularity, totals: seriesTotals 
               right: tooltipOnLeft ? width - (centerOf(active) - barW / 2 - 10) : undefined,
             }}
           >
-            <p className="text-xs text-[#4A5240]">{activeBucket.longLabel}</p>
-            <p className="text-base font-bold text-[#17210E]">{formatNaira(totals[active])}</p>
+            <p className="text-xs text-[#3F4F4C]">{activeBucket.longLabel}</p>
+            <p className="text-base font-bold text-[#0F1F1D]">{formatNaira(totals[active])}</p>
             {series.length > 1 && (
               <ul className="mt-1.5 space-y-1">
                 {series.map((k) => (
                   <li key={k} className="flex items-center gap-2 text-xs">
                     <span aria-hidden="true" className="w-3 h-0.5 rounded-full" style={{ background: SERIES_META[k].color }} />
-                    <span className="font-semibold text-[#17210E] tabular-nums">{formatNaira(activeBucket[k])}</span>
-                    <span className="text-[#4A5240]">{SERIES_META[k].label}</span>
+                    <span className="font-semibold text-[#0F1F1D] tabular-nums">{formatNaira(activeBucket[k])}</span>
+                    <span className="text-[#3F4F4C]">{SERIES_META[k].label}</span>
                   </li>
                 ))}
               </ul>
             )}
-            <p className="mt-1.5 text-xs text-[#4A5240]">
+            <p className="mt-1.5 text-xs text-[#3F4F4C]">
               {activeBucket.orders} paid {activeBucket.orders === 1 ? 'order' : 'orders'}
             </p>
           </div>
@@ -252,7 +252,7 @@ export function SalesTable({ buckets, series }: { buckets: SalesBucket[]; series
     <div className="max-h-[260px] overflow-auto rounded-xl border border-[#E2DACA]">
       <table className="w-full text-xs">
         <caption className="sr-only">Verified sales by period</caption>
-        <thead className="sticky top-0 bg-[#FAF8F4] text-left text-[#4A5240]">
+        <thead className="sticky top-0 bg-[#FAF8F4] text-left text-[#3F4F4C]">
           <tr>
             <th scope="col" className="px-3 py-2 font-semibold">Period</th>
             {series.length > 1 &&
@@ -265,7 +265,7 @@ export function SalesTable({ buckets, series }: { buckets: SalesBucket[]; series
             <th scope="col" className="px-3 py-2 font-semibold text-right">Paid orders</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-[#F4EFE6] text-[#17210E] tabular-nums">
+        <tbody className="divide-y divide-[#F4EFE6] text-[#0F1F1D] tabular-nums">
           {buckets.map((b) => (
             <tr key={b.start}>
               <th scope="row" className="px-3 py-2 text-left font-medium">{b.longLabel}</th>

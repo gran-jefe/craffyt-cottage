@@ -76,15 +76,15 @@ export function ProductOptionsDialog({ product, onClose, onAdd }: Props) {
   const chip = (active: boolean, available: boolean) =>
     `min-h-[44px] px-4 rounded-full border text-sm transition-colors duration-150 inline-flex items-center gap-2 ${
       active
-        ? 'bg-[#17210E] border-[#17210E] text-white font-semibold'
+        ? 'bg-[#0F1F1D] border-[#0F1F1D] text-white font-semibold'
         : available
-        ? 'bg-white border-[#E2DACA] text-[#17210E] hover:border-[#263E0F] font-medium'
-        : 'bg-[#F4EFE6] border-[#E2DACA] text-[#5E6654] line-through font-medium'
+        ? 'bg-white border-[#E2DACA] text-[#0F1F1D] hover:border-[#0B3D3A] font-medium'
+        : 'bg-[#F4EFE6] border-[#E2DACA] text-[#56625F] line-through font-medium'
     }`
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-[#111B07]/55 flex items-end sm:items-center justify-center sm:p-4"
+      className="fixed inset-0 z-50 bg-[#04201F]/55 flex items-end sm:items-center justify-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="options-title"
@@ -108,7 +108,7 @@ export function ProductOptionsDialog({ product, onClose, onAdd }: Props) {
               type="button"
               onClick={onClose}
               aria-label="Close options"
-              className="absolute top-3 right-3 sm:hidden min-w-[44px] min-h-[44px] rounded-full bg-[#FAF8F4]/95 text-[#17210E] grid place-items-center"
+              className="absolute top-3 right-3 sm:hidden min-w-[44px] min-h-[44px] rounded-full bg-[#FAF8F4]/95 text-[#0F1F1D] grid place-items-center"
             >
               <X className="w-5 h-5" aria-hidden="true" />
             </button>
@@ -117,10 +117,10 @@ export function ProductOptionsDialog({ product, onClose, onAdd }: Props) {
           <div className="p-5 sm:p-7 flex flex-col">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#355416]">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#12564F]">
                   {product.collection}
                 </p>
-                <h2 id="options-title" className="mt-2 font-serif-display font-medium text-2xl leading-tight text-[#111B07]">
+                <h2 id="options-title" className="mt-2 font-serif-display font-medium text-2xl leading-tight text-[#04201F]">
                   {product.name}
                 </h2>
               </div>
@@ -128,20 +128,20 @@ export function ProductOptionsDialog({ product, onClose, onAdd }: Props) {
                 type="button"
                 onClick={onClose}
                 aria-label="Close options"
-                className="hidden sm:grid min-w-[44px] min-h-[44px] -mr-2 -mt-2 rounded-full text-[#17210E] hover:bg-[#F4EFE6] place-items-center"
+                className="hidden sm:grid min-w-[44px] min-h-[44px] -mr-2 -mt-2 rounded-full text-[#0F1F1D] hover:bg-[#F4EFE6] place-items-center"
               >
                 <X className="w-5 h-5" aria-hidden="true" />
               </button>
             </div>
 
-            <p className="mt-2 text-lg font-semibold text-[#263E0F] tabular-nums" aria-live="polite">
+            <p className="mt-2 text-lg font-semibold text-[#0B3D3A] tabular-nums" aria-live="polite">
               {formatNaira(price)}
             </p>
 
             {colors.length > 0 && (
               <fieldset className="mt-6">
-                <legend className="text-sm text-[#4A5240]">
-                  Colour: <span className="font-semibold text-[#17210E]">{color}</span>
+                <legend className="text-sm text-[#3F4F4C]">
+                  Colour: <span className="font-semibold text-[#0F1F1D]">{color}</span>
                 </legend>
                 <div className="mt-2.5 flex flex-wrap gap-2">
                   {colors.map((c) => {
@@ -169,8 +169,8 @@ export function ProductOptionsDialog({ product, onClose, onAdd }: Props) {
 
             {sizes.length > 0 && (
               <fieldset className="mt-5">
-                <legend className="text-sm text-[#4A5240]">
-                  Size: <span className="font-semibold text-[#17210E]">{size}</span>
+                <legend className="text-sm text-[#3F4F4C]">
+                  Size: <span className="font-semibold text-[#0F1F1D]">{size}</span>
                 </legend>
                 <div className="mt-2.5 flex flex-wrap gap-2">
                   {sizes.map((s) => {
@@ -200,12 +200,12 @@ export function ProductOptionsDialog({ product, onClose, onAdd }: Props) {
               ) : stock <= 2 ? (
                 <span className="font-medium text-[#8A6A12]">Only {stock} left</span>
               ) : (
-                <span className="text-[#4A5240]">In stock, ready to ship</span>
+                <span className="text-[#3F4F4C]">In stock, ready to ship</span>
               )}
             </p>
 
             {product.description && (
-              <p className="mt-4 text-sm text-[#4A5240] leading-relaxed">{product.description}</p>
+              <p className="mt-4 text-sm text-[#3F4F4C] leading-relaxed">{product.description}</p>
             )}
 
             <div className="mt-auto pt-6">
@@ -213,7 +213,7 @@ export function ProductOptionsDialog({ product, onClose, onAdd }: Props) {
               type="button"
               disabled={!canAdd}
               onClick={() => selected && onAdd(product, selected)}
-              className="w-full min-h-[48px] px-6 rounded-xl bg-[#263E0F] hover:bg-[#111B07] active:bg-[#0B1204] text-white text-sm font-semibold tracking-wide transition-colors duration-150 disabled:bg-[#E8DEC8] disabled:text-[#5E6654] disabled:cursor-not-allowed"
+              className="w-full min-h-[48px] px-6 rounded-xl bg-[#0B3D3A] hover:bg-[#04201F] active:bg-[#021817] text-white text-sm font-semibold tracking-wide transition-colors duration-150 disabled:bg-[#E8DEC8] disabled:text-[#56625F] disabled:cursor-not-allowed"
             >
               {canAdd ? `Add to bag · ${formatNaira(price)}` : 'Unavailable'}
             </button>

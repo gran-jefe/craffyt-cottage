@@ -22,10 +22,10 @@ export function ChartCard({ title, subtitle, table, aside, children, className =
     <section aria-labelledby={headingId} className={`bg-white rounded-2xl border border-[#E2DACA] p-5 sm:p-6 space-y-4 ${className}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 id={headingId} className="font-serif-display text-lg font-bold text-[#17210E]">
+          <h3 id={headingId} className="font-serif-display text-lg font-bold text-[#0F1F1D]">
             {title}
           </h3>
-          {subtitle && <p className="text-xs text-[#4A5240] leading-relaxed">{subtitle}</p>}
+          {subtitle && <p className="text-xs text-[#3F4F4C] leading-relaxed">{subtitle}</p>}
         </div>
         <div className="flex w-full sm:w-auto items-center justify-between sm:justify-end gap-3">
           {aside}
@@ -34,7 +34,7 @@ export function ChartCard({ title, subtitle, table, aside, children, className =
               type="button"
               aria-pressed={showTable}
               onClick={() => setShowTable((v) => !v)}
-              className="min-h-[44px] px-3 rounded-xl border border-[#E2DACA] hover:border-[#263E0F] hover:bg-[#FAF8F4] text-xs font-bold text-[#17210E] inline-flex items-center gap-1.5 transition-colors"
+              className="min-h-[44px] px-3 rounded-xl border border-[#E2DACA] hover:border-[#0B3D3A] hover:bg-[#FAF8F4] text-xs font-bold text-[#0F1F1D] inline-flex items-center gap-1.5 transition-colors"
             >
               {showTable ? <BarChart3 className="w-4 h-4" /> : <Table2 className="w-4 h-4" />}
               <span>{showTable ? 'Show chart' : 'Show table'}</span>

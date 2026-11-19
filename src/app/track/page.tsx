@@ -88,13 +88,13 @@ function TrackContent() {
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 space-y-8">
       <div className="text-center space-y-2">
-        <span className="text-xs font-bold uppercase tracking-widest text-[#355416]">
+        <span className="text-xs font-bold uppercase tracking-widest text-[#12564F]">
           Order status
         </span>
-        <h1 className="font-serif-display text-3xl sm:text-4xl font-bold text-[#111B07]">
+        <h1 className="font-serif-display text-3xl sm:text-4xl font-bold text-[#04201F]">
           Track your order
         </h1>
-        <p className="text-sm text-[#4A5240]">
+        <p className="text-sm text-[#3F4F4C]">
           Enter your Crafty Cottage reference code (for example, <strong>CC-7K9P2M</strong>).
         </p>
       </div>
@@ -114,7 +114,7 @@ function TrackContent() {
         <button
           type="submit"
           disabled={loading}
-          className="shrink-0 min-h-[48px] px-5 sm:px-6 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-sm font-bold flex items-center gap-2 transition-colors disabled:opacity-60"
+          className="shrink-0 min-h-[48px] px-5 sm:px-6 rounded-xl bg-[#0B3D3A] hover:bg-[#04201F] text-white text-sm font-bold flex items-center gap-2 transition-colors disabled:opacity-60"
         >
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
           <span>Track</span>
@@ -124,16 +124,16 @@ function TrackContent() {
       {lookupError && !loading && (
         <div role="alert" className="bg-white rounded-2xl border border-red-200 p-8 text-center space-y-3">
           <XCircle className="w-8 h-8 text-[#B42318] mx-auto" />
-          <h2 className="font-serif-display text-xl font-bold text-[#17210E]">
+          <h2 className="font-serif-display text-xl font-bold text-[#0F1F1D]">
             We couldn&apos;t reach the order tracker
           </h2>
-          <p className="text-sm text-[#4A5240]">
+          <p className="text-sm text-[#3F4F4C]">
             Your order is safe. This is a connection problem on our side or yours. Please try again.
           </p>
           <button
             type="button"
             onClick={() => runLookup(codeInput)}
-            className="min-h-[44px] px-5 rounded-xl bg-[#263E0F] hover:bg-[#111B07] text-white text-sm font-bold"
+            className="min-h-[44px] px-5 rounded-xl bg-[#0B3D3A] hover:bg-[#04201F] text-white text-sm font-bold"
           >
             Try again
           </button>
@@ -142,11 +142,11 @@ function TrackContent() {
 
       {searched && !loading && !lookupError && !result && (
         <div className="bg-white rounded-2xl border border-[#E2DACA] p-8 text-center space-y-2">
-          <Package className="w-8 h-8 text-[#4A5240] mx-auto" />
-          <h2 className="font-serif-display text-xl font-bold text-[#17210E]">
+          <Package className="w-8 h-8 text-[#3F4F4C] mx-auto" />
+          <h2 className="font-serif-display text-xl font-bold text-[#0F1F1D]">
             Order not found
           </h2>
-          <p className="text-sm text-[#4A5240]">
+          <p className="text-sm text-[#3F4F4C]">
             Please double-check the reference code from your checkout confirmation screen.
           </p>
           <a
@@ -155,7 +155,7 @@ function TrackContent() {
             )}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-2 min-h-[44px] px-5 rounded-xl border border-[#263E0F] text-[#263E0F] hover:bg-[#EAF2DE] text-sm font-bold inline-flex items-center gap-2 transition-colors"
+            className="mt-2 min-h-[44px] px-5 rounded-xl border border-[#0B3D3A] text-[#0B3D3A] hover:bg-[#E3F0EE] text-sm font-bold inline-flex items-center gap-2 transition-colors"
           >
             <MessageCircle className="w-4 h-4" />
             <span>Ask us on WhatsApp</span>
@@ -167,16 +167,16 @@ function TrackContent() {
         <div className="bg-white rounded-2xl border border-[#E2DACA] p-6 sm:p-8 space-y-6 shadow-xs">
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#E2DACA] pb-4">
             <div>
-              <span className="text-xs text-[#4A5240] block">Order reference</span>
-              <strong className="text-2xl font-extrabold text-[#263E0F] tracking-wider">
+              <span className="text-xs text-[#3F4F4C] block">Order reference</span>
+              <strong className="text-2xl font-extrabold text-[#0B3D3A] tracking-wider">
                 {result.orderCode}
               </strong>
             </div>
             <div className="sm:text-right">
-              <span className="text-xs text-[#4A5240] block">
+              <span className="text-xs text-[#3F4F4C] block">
                 {result.itemCount} item(s) · {result.deliveryZone}
               </span>
-              <strong className="text-lg font-bold text-[#17210E] tabular-nums">
+              <strong className="text-lg font-bold text-[#0F1F1D] tabular-nums">
                 {formatNaira(result.total)}
               </strong>
             </div>
@@ -202,8 +202,8 @@ function TrackContent() {
                     <span
                       className={`w-8 h-8 rounded-full grid place-items-center shrink-0 mt-0.5 border ${
                         done
-                          ? 'bg-[#263E0F] text-white border-[#263E0F]'
-                          : 'bg-[#FAF8F4] text-[#4A5240] border-[#E2DACA]'
+                          ? 'bg-[#0B3D3A] text-white border-[#0B3D3A]'
+                          : 'bg-[#FAF8F4] text-[#3F4F4C] border-[#E2DACA]'
                       }`}
                     >
                       {done ? (
@@ -217,15 +217,15 @@ function TrackContent() {
                       )}
                     </span>
                     <div className="flex-1">
-                      <p className={`text-sm font-bold ${done ? 'text-[#17210E]' : 'text-[#4A5240]'}`}>
+                      <p className={`text-sm font-bold ${done ? 'text-[#0F1F1D]' : 'text-[#3F4F4C]'}`}>
                         {step.label}
                         {current && (
-                          <span className="ml-2 text-xs bg-[#EAF2DE] text-[#263E0F] px-2 py-0.5 rounded-md">
+                          <span className="ml-2 text-xs bg-[#E3F0EE] text-[#0B3D3A] px-2 py-0.5 rounded-md">
                             Current stage
                           </span>
                         )}
                       </p>
-                      <p className="text-xs text-[#4A5240] mt-0.5">{step.desc}</p>
+                      <p className="text-xs text-[#3F4F4C] mt-0.5">{step.desc}</p>
                     </div>
                   </li>
                 )
@@ -234,7 +234,7 @@ function TrackContent() {
           )}
 
           {result.dispatchNote && result.status !== 'cancelled' && (
-            <div className="p-4 rounded-xl bg-[#FAF8F4] border border-[#E2DACA] text-xs text-[#17210E]">
+            <div className="p-4 rounded-xl bg-[#FAF8F4] border border-[#E2DACA] text-xs text-[#0F1F1D]">
               <span className="font-bold block mb-0.5">Delivery note and tracking info</span>
               <span>{result.dispatchNote}</span>
             </div>
@@ -250,7 +250,7 @@ export default function TrackOrderPage() {
     <>
       <SiteHeader />
       <main className="flex-1 py-12 sm:py-16">
-        <Suspense fallback={<div className="text-center py-12 text-sm text-[#4A5240]">Loading order tracker...</div>}>
+        <Suspense fallback={<div className="text-center py-12 text-sm text-[#3F4F4C]">Loading order tracker...</div>}>
           <TrackContent />
         </Suspense>
       </main>
