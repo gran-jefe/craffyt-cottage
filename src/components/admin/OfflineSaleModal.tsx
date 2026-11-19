@@ -12,13 +12,16 @@ import {
 import { formatNaira } from '@/lib/defaults'
 import { useCart } from '@/context/CartContext'
 import { findVariant, hasVariants, variantLabel, variantPrice } from '@/lib/variants'
-import type { OrderItem, OrderStatus, PaymentMethod, Product } from '@/types/store'
+import type { Order, OrderItem, OrderStatus, PaymentMethod, Product } from '@/types/store'
+import { parsePhone } from '@/lib/phone'
 
 interface Props {
   open: boolean
   products: Product[]
   onClose: () => void
   onSaved: () => Promise<void>
+  /** Called with the new record, e.g. to offer its receipt straight away. */
+  onCreated?: (order: Order) => void
 }
 
 interface LineItemDraft {
@@ -85,7 +88,7 @@ function createInitialLine(products: Product[]): LineItemDraft {
   }
 }
 
-export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
+export function OfflineSaleModal({ open, products, onClose, onSaved, onCreated }: Props) {
   const { showToast } = useCart()
   const [lines, setLines] = useState<LineItemDraft[]>([])
   const [customerName, setCustomerName] = useState('')
@@ -256,7 +259,11 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
     try {
       const created = await createOfflineOrder({
         customerName: customerName.trim() || 'Walk-in Customer',
-        customerPhone: customerPhone.trim(),
+        // Saved in international format when it parses, so WhatsApp links work.
+        customerPhone: (() => {
+          const parsed = parsePhone(customerPhone.trim())
+          return parsed.ok ? parsed.e164 : customerPhone.trim()
+        })(),
         offlineSource,
         deliveryZone: offlineSource,
         deliveryFee: numericFee,
@@ -273,6 +280,7 @@ export function OfflineSaleModal({ open, products, onClose, onSaved }: Props) {
       })
       await onSaved()
       onClose()
+      onCreated?.(created)
       showToast(
         `Offline record ${created.orderCode} saved${
           hasCatalogItems && deductStock ? ' and stock updated' : ''
