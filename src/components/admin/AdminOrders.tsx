@@ -15,6 +15,7 @@ import {
   ChevronDown,
   Truck,
   XCircle,
+  FileText,
 } from 'lucide-react'
 import {
   StockShortageError,
@@ -26,6 +27,7 @@ import { formatNaira } from '@/lib/defaults'
 import { findVariant, variantPrice } from '@/lib/variants'
 import { useCart } from '@/context/CartContext'
 import { OfflineSaleModal } from '@/components/admin/OfflineSaleModal'
+import { OrderDocumentDialog } from '@/components/admin/OrderDocumentDialog'
 import { useDialogFocus } from '@/lib/useDialogFocus'
 import type {
   DeliveryZone,
@@ -34,6 +36,7 @@ import type {
   OrderStatus,
   PaymentMethod,
   Product,
+  StoreSettings,
 } from '@/types/store'
 import { formatPhone, whatsappDigits } from '@/lib/phone'
 
@@ -42,6 +45,8 @@ interface Props {
   products: Product[]
   /** Current zones from store settings; empty when settings aren't saved (fee check skipped). */
   deliveryZones: DeliveryZone[]
+  /** Bank and contact details printed on invoices and receipts. */
+  settings: StoreSettings | null
   onRefresh: () => Promise<void>
   /** Open with this status filter applied (e.g. from the overview's "Review receipts"). */
   initialStatusFilter?: OrderStatus
@@ -218,6 +223,7 @@ interface OrderActionsProps {
   onNoteChange: (value: string) => void
   onStatusChange: (next: OrderStatus) => Promise<boolean>
   onOpenReceipt: () => void
+  onOpenDocument: () => void
   onRequestCancel: () => void
 }
 
@@ -234,6 +240,7 @@ function OrderActions({
   onNoteChange,
   onStatusChange,
   onOpenReceipt,
+  onOpenDocument,
   onRequestCancel,
 }: OrderActionsProps) {
   const [moreOpen, setMoreOpen] = useState(false)
@@ -319,6 +326,13 @@ function OrderActions({
             <button type="button" onClick={onOpenReceipt} className={secondaryClass}>
               <Eye className="w-3.5 h-3.5" />
               <span>View receipt</span>
+            </button>
+          )}
+
+          {order.status !== 'cancelled' && (
+            <button type="button" onClick={onOpenDocument} className={secondaryClass}>
+              <FileText className="w-3.5 h-3.5 text-[#0B3D3A]" />
+              <span>{order.status === 'pending_verification' ? 'Invoice' : 'Receipt'}</span>
             </button>
           )}
 
@@ -425,12 +439,13 @@ function OrderActions({
   )
 }
 
-export function AdminOrders({ orders, products, deliveryZones, onRefresh, initialStatusFilter }: Props) {
+export function AdminOrders({ orders, products, deliveryZones, settings, onRefresh, initialStatusFilter }: Props) {
   const { showToast } = useCart()
   const [filterChannel, setFilterChannel] = useState<'all' | OrderChannel>('all')
   const [filterStatus, setFilterStatus] = useState<'all' | OrderStatus>(initialStatusFilter ?? 'all')
   const [offlineModalOpen, setOfflineModalOpen] = useState(false)
   const [receiptModalOrder, setReceiptModalOrder] = useState<Order | null>(null)
+  const [docOrder, setDocOrder] = useState<Order | null>(null)
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({})
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null)
@@ -673,6 +688,7 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh, initia
                   onNoteChange={(value) => setNoteDrafts((d) => ({ ...d, [order.id]: value }))}
                   onStatusChange={(next) => handleStatusChange(order, next)}
                   onOpenReceipt={() => setReceiptModalOrder(order)}
+                  onOpenDocument={() => setDocOrder(order)}
                   onRequestCancel={() => {
                     // Default: put stock back, except after delivery (the bag is with the customer).
                     setRestockOnCancel(order.status !== 'delivered')
@@ -825,6 +841,14 @@ export function AdminOrders({ orders, products, deliveryZones, onRefresh, initia
             )}
           </div>
         </div>
+      )}
+      {docOrder && (
+        <OrderDocumentDialog
+          order={docOrder}
+          settings={settings}
+          onClose={() => setDocOrder(null)}
+          onNotify={(message) => showToast(message)}
+        />
       )}
       <OfflineSaleModal
         open={offlineModalOpen}

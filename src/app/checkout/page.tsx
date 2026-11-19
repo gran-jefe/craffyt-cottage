@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft,
+  Download,
   CheckCircle2,
   Copy,
   Check,
@@ -57,6 +58,22 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null)
+  const [downloadingInvoice, setDownloadingInvoice] = useState(false)
+
+  async function downloadInvoice() {
+    if (!completedOrder) return
+    setDownloadingInvoice(true)
+    try {
+      const { buildOrderPdf, docFileName, saveBlob } = await import('@/lib/orderDocument')
+      const blob = await buildOrderPdf('invoice', completedOrder, paymentStatus === 'ready' ? settings : null)
+      saveBlob(blob, docFileName('invoice', completedOrder))
+      showToast('Invoice downloaded')
+    } catch {
+      showToast('Could not create the invoice. Please try again.', 'error')
+    } finally {
+      setDownloadingInvoice(false)
+    }
+  }
   const [cartChanges, setCartChanges] = useState<string[]>([])
   const [reconciledOnLoad, setReconciledOnLoad] = useState(false)
 
@@ -168,11 +185,10 @@ export default function CheckoutPage() {
     if (customerName.trim().length < 2) next.customerName = 'Please enter your full name.'
     const phone = parsePhoneForCountry(phoneCountry, customerPhone)
     if (!phone.ok) next.customerPhone = phone.error
-    if (
-      customerEmail.trim() &&
-      !/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(customerEmail.trim())
-    ) {
-      next.customerEmail = 'Please enter a valid email address or leave blank.'
+    if (!customerEmail.trim()) {
+      next.customerEmail = 'Please enter your email address. We send your receipt there.'
+    } else if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(customerEmail.trim())) {
+      next.customerEmail = 'Please enter a valid email address, e.g. amina@example.com.'
     }
     if (!selectedZone) next.deliveryZone = 'Choose where we should deliver.'
     if (address.trim().length < 5)
@@ -289,7 +305,19 @@ export default function CheckoutPage() {
                   Total amount: <strong>{formatNaira(completedOrder.total)}</strong> ·{' '}
                   {completedOrder.deliveryZone}
                 </p>
+                <button
+                  type="button"
+                  disabled={downloadingInvoice}
+                  onClick={downloadInvoice}
+                  className="mt-1 min-h-[44px] px-3 rounded-xl text-sm font-bold text-[#0B3D3A] hover:bg-[#E3F0EE] inline-flex items-center gap-2 transition-colors disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B3D3A]"
+                >
+                  {downloadingInvoice ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                  {downloadingInvoice ? 'Preparing invoice…' : 'Download invoice (PDF)'}
+                </button>
               </div>
+              <p className="text-xs text-[#3F4F4C] leading-relaxed">
+                We&apos;ll send your receipt on WhatsApp once your payment is confirmed.
+              </p>
 
               <div className="flex flex-col sm:flex-row gap-3 pt-2">
                 <Link
@@ -429,7 +457,7 @@ export default function CheckoutPage() {
 
                     <div>
                       <label htmlFor="customerEmail" className="block text-xs font-bold text-[#0F1F1D] mb-1">
-                        Email address <span className="font-normal text-[#3F4F4C]">(optional)</span>
+                        Email address *
                       </label>
                       <input
                         id="customerEmail"
@@ -437,6 +465,8 @@ export default function CheckoutPage() {
                         autoCapitalize="none"
                         autoCorrect="off"
                         type="email"
+                        required
+                        aria-required="true"
                         value={customerEmail}
                         onChange={(e) => {
                           setCustomerEmail(e.target.value)
