@@ -1,5 +1,6 @@
 'use client'
 
+import type { CostBook } from '@/lib/costs'
 import React, { useEffect, useMemo, useState } from 'react'
 import { AlertCircle, AlertTriangle, CheckCircle2, LineChart, Plus, RotateCcw } from 'lucide-react'
 import {
@@ -34,6 +35,10 @@ interface Props {
   expenses: Expense[]
   /** Expenses failed to load: profit can't be worked out, so it isn't shown. */
   expensesError: boolean
+  /** Private cost prices, for cost of goods sold. */
+  costs: CostBook
+  /** Cost prices failed to load: profit is shown without cost of goods, with a warning. */
+  costsError: boolean
   /** True while a background refresh runs: keep the frame, dim it, never flash a skeleton. */
   refreshing: boolean
   onNavigate: OverviewNavigate
@@ -100,7 +105,7 @@ function saveFilters(filters: DashboardFilters) {
 
 /* ---------- Component ---------- */
 
-export function AdminOverview({ orders, products, bespoke, expenses, expensesError, refreshing, onNavigate }: Props) {
+export function AdminOverview({ orders, products, bespoke, expenses, expensesError, costs, costsError, refreshing, onNavigate }: Props) {
   const [filters, setFilters] = useState<DashboardFilters>(loadSavedFilters)
 
   useEffect(() => {
@@ -112,8 +117,8 @@ export function AdminOverview({ orders, products, bespoke, expenses, expensesErr
 
   const attention = useMemo(() => computeAttention(orders, products, bespoke, now), [orders, products, bespoke, now])
   const data = useMemo(
-    () => computeDashboard(orders, products, bespoke, filters, now, { expenses }),
-    [orders, products, bespoke, expenses, filters, now]
+    () => computeDashboard(orders, products, bespoke, filters, now, { expenses, costs }),
+    [orders, products, bespoke, expenses, costs, filters, now]
   )
 
   const series: SeriesKey[] =
@@ -388,8 +393,8 @@ export function AdminOverview({ orders, products, bespoke, expenses, expensesErr
               </ChartCard>
 
               <ChartCard
-                title="Profit after expenses"
-                subtitle={`Verified sales from all channels, minus expenses for ${data.range.rangeLabel}. Monthly and yearly costs are spread evenly over their days.`}
+                title="Profit"
+                subtitle={`Verified sales from all channels, minus what the pieces sold cost you and your expenses, for ${data.range.rangeLabel}. Monthly and yearly expenses are spread evenly over their days.`}
                 aside={
                   <button
                     type="button"
@@ -408,8 +413,15 @@ export function AdminOverview({ orders, products, bespoke, expenses, expensesErr
                   </p>
                 ) : (
                   <div className="space-y-5">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-px rounded-xl border border-[#E2DACA] bg-[#E2DACA] overflow-hidden">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-px rounded-xl border border-[#E2DACA] bg-[#E2DACA] overflow-hidden">
                       <StatTile label="Sales" metric={data.allSales} format={roundedNaira} compareLabel={data.range.compareLabel} />
+                      <StatTile
+                        label="Cost of pieces sold"
+                        metric={data.costOfGoods}
+                        format={roundedNaira}
+                        compareLabel={data.range.compareLabel}
+                        upIsGood={false}
+                      />
                       <StatTile
                         label="Expenses"
                         metric={data.expenses}
@@ -424,6 +436,30 @@ export function AdminOverview({ orders, products, bespoke, expenses, expensesErr
                         compareLabel={data.range.compareLabel}
                       />
                     </div>
+                    {costsError ? (
+                      <p role="alert" className="flex items-start gap-2 text-xs text-[#7A1B14] bg-red-50 border border-red-200 rounded-xl p-3 leading-relaxed">
+                        <AlertCircle className="w-4 h-4 shrink-0" aria-hidden="true" />
+                        Cost prices couldn&apos;t be loaded, so only costs recorded on paid orders are counted. Refresh the page to try again.
+                      </p>
+                    ) : data.uncostedUnits > 0 ? (
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[#7A4A00] bg-amber-50 border border-amber-200 rounded-xl p-3 leading-relaxed">
+                        <p className="flex items-start gap-2">
+                          <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" />
+                          <span>
+                            {data.uncostedUnits} {data.uncostedUnits === 1 ? 'piece' : 'pieces'} sold in this period{' '}
+                            {data.uncostedUnits === 1 ? 'has' : 'have'} no cost price, so profit is higher than it really is.
+                            Add cost prices in Inventory.
+                          </span>
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => onNavigate('inventory')}
+                          className="min-h-[44px] px-3 rounded-xl border border-amber-300 bg-white hover:bg-amber-100 font-bold text-[#7A4A00] transition-colors"
+                        >
+                          Add cost prices
+                        </button>
+                      </div>
+                    ) : null}
                     {filters.channel !== 'all' && (
                       <p className="text-xs text-[#3F4F4C] leading-relaxed">
                         Profit uses sales from every channel, because expenses aren&apos;t split between online and offline.
@@ -434,7 +470,7 @@ export function AdminOverview({ orders, products, bespoke, expenses, expensesErr
                     ) : (
                       <p className="text-sm text-[#3F4F4C] leading-relaxed">
                         {expenses.length === 0
-                          ? 'No expenses recorded yet, so profit equals sales. Record costs like beads, packaging and delivery to see your real profit.'
+                          ? 'No expenses recorded yet. Record running costs like packaging, delivery and rent to see your real profit.'
                           : 'No expenses fall in this period.'}
                       </p>
                     )}

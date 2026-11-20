@@ -95,7 +95,25 @@ export interface Order {
   /** Set once the app has put this order's stock back (on cancel). */
   stockRestored?: boolean
   dispatchNote?: string
+  /**
+   * What each line cost the business per unit, recorded when the order was paid (same order as
+   * `items`). null = no cost price was set then. Admin-only data, never written by customers.
+   */
+  itemCosts?: (number | null)[]
   createdAt: string
+  updatedAt: string
+}
+
+/**
+ * What a product costs the business to make or buy, per unit. Kept apart from the product
+ * because products are public and costs must stay private (admin-only `productCosts/{productId}`).
+ */
+export interface ProductCost {
+  productId: string
+  /** Cost of one piece; for products with options, the default for any option without its own. */
+  cost?: number
+  /** Option id → cost of one piece of that option. */
+  variants?: Record<string, number>
   updatedAt: string
 }
 

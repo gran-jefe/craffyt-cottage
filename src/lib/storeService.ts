@@ -28,8 +28,10 @@ import type {
   OrderTrackingInfo,
   PaymentMethod,
   Product,
+  ProductCost,
   StoreSettings,
 } from '@/types/store'
+import { snapshotItemCosts, type CostBook } from './costs'
 
 const DEMO_KEYS = {
   products: 'cc_demo_products_v1',
@@ -38,6 +40,7 @@ const DEMO_KEYS = {
   expenses: 'cc_demo_expenses_v1',
   catalog: 'cc_demo_catalog_v1',
   settings: 'cc_demo_settings_v1',
+  costs: 'cc_demo_costs_v1',
 }
 
 function readDemo<T>(key: string, fallback: T): T {
@@ -293,13 +296,64 @@ export async function adjustProductStockBy(productId: string, delta: number, var
 export async function deleteProduct(productId: string): Promise<void> {
   if (isFirebaseConfigured && db) {
     await deleteDoc(doc(db, 'products', productId))
+    await deleteDoc(doc(db, 'productCosts', productId)).catch(() => {}) // may not exist
     return
   }
+  writeDemo(
+    DEMO_KEYS.costs,
+    readDemo<ProductCost[]>(DEMO_KEYS.costs, []).filter((c) => c.productId !== productId)
+  )
   const rows = readDemo<Product[]>(DEMO_KEYS.products, DEFAULT_PRODUCTS)
   writeDemo(
     DEMO_KEYS.products,
     rows.filter((p) => p.id !== productId)
   )
+}
+
+/* ---------- Cost prices (admin only) ---------- */
+
+export async function fetchProductCosts(): Promise<CostBook> {
+  if (isFirebaseConfigured && db) {
+    const snap = await getDocs(collection(db, 'productCosts'))
+    return new Map(snap.docs.map((d) => [d.id, { ...(d.data() as Omit<ProductCost, 'productId'>), productId: d.id }]))
+  }
+  return new Map(readDemo<ProductCost[]>(DEMO_KEYS.costs, []).map((c) => [c.productId, c]))
+}
+
+/** Saves a product's cost prices; with no cost at all, removes its record. */
+export async function saveProductCost(
+  productId: string,
+  cost: number | null,
+  variants: Record<string, number>
+): Promise<void> {
+  const now = new Date().toISOString()
+  const data: Omit<ProductCost, 'productId'> = { updatedAt: now }
+  if (cost !== null) data.cost = cost
+  if (Object.keys(variants).length > 0) data.variants = variants
+  const empty = cost === null && !data.variants
+
+  if (isFirebaseConfigured && db) {
+    const ref = doc(db, 'productCosts', productId)
+    if (empty) await deleteDoc(ref)
+    else await setDoc(ref, data)
+    return
+  }
+  const rows = readDemo<ProductCost[]>(DEMO_KEYS.costs, []).filter((c) => c.productId !== productId)
+  writeDemo(DEMO_KEYS.costs, empty ? rows : [...rows, { productId, ...data }])
+}
+
+/** Cost records for just these products (used when recording a sale). */
+async function costBookFor(productIds: string[]): Promise<CostBook> {
+  const ids = Array.from(new Set(productIds.filter((id) => id && id !== 'custom')))
+  if (ids.length === 0) return new Map()
+  if (isFirebaseConfigured && db) {
+    const firestore = db
+    const snaps = await Promise.all(ids.map((id) => getDoc(doc(firestore, 'productCosts', id))))
+    return new Map(
+      snaps.filter((s) => s.exists()).map((s) => [s.id, { ...(s.data() as Omit<ProductCost, 'productId'>), productId: s.id }])
+    )
+  }
+  return fetchProductCosts()
 }
 
 /* ---------- Orders ---------- */
@@ -427,6 +481,10 @@ export async function createOfflineOrder(input: CreateOfflineOrderInput): Promis
     dispatchNote: '',
     updatedAt: now,
   }
+
+  // Record what the pieces cost today, so later cost changes don't rewrite this sale's profit.
+  const book = await costBookFor(input.items.map((i) => i.productId)).catch(() => null)
+  if (book) (orderDoc as Partial<Order>).itemCosts = snapshotItemCosts(input.items, book)
 
   const moves = input.deductStock ? movesByProduct(stockHeldByOrder(input.items), -1) : new Map<string, Map<string, number>>()
 
@@ -619,6 +677,17 @@ export async function updateOrderStatus(
         return p ? stockForLine(p, l.variantId) : null
       }
 
+      // First time the order counts as paid: record what its pieces cost right now.
+      let itemCosts: (number | null)[] | null = null
+      if (PAID_STATUSES.includes(newStatus) && !Array.isArray(stored.itemCosts)) {
+        const costIds = Array.from(new Set(stored.items.map((i) => i.productId).filter((id) => id && id !== 'custom')))
+        const costSnaps = await Promise.all(costIds.map((id) => tx.get(doc(firestore, 'productCosts', id))))
+        const book: CostBook = new Map(
+          costSnaps.filter((cs) => cs.exists()).map((cs) => [cs.id, { ...(cs.data() as Omit<ProductCost, 'productId'>), productId: cs.id }])
+        )
+        itemCosts = snapshotItemCosts(stored.items, book)
+      }
+
       if (move === 'deduct') {
         // Rules reject negative stock, which would surface as an opaque permission error.
         const shortages = findShortages(held, stockFor)
@@ -626,6 +695,7 @@ export async function updateOrderStatus(
       }
 
       const orderPatch: Record<string, unknown> = { status: newStatus, dispatchNote: cleanNote, updatedAt: now }
+      if (itemCosts) orderPatch.itemCosts = itemCosts
       if (move === 'deduct') orderPatch.stockDeducted = true
       if (move === 'restore') {
         orderPatch.stockDeducted = false
@@ -658,6 +728,7 @@ export async function updateOrderStatus(
   const move = planStockMove(stored, newStatus, restock)
   const held = move ? stockHeldByOrder(stored.items) : new Map<string, HeldLine>()
   const products = readDemo<Product[]>(DEMO_KEYS.products, DEFAULT_PRODUCTS)
+  const demoCosts: CostBook = new Map(readDemo<ProductCost[]>(DEMO_KEYS.costs, []).map((c) => [c.productId, c]))
   const demoStockFor = (l: HeldLine) => {
     const p = products.find((x) => x.id === l.productId)
     return p ? stockForLine(p, l.variantId) : null
@@ -671,6 +742,9 @@ export async function updateOrderStatus(
     orders.map((o) => {
       if (o.id !== order.id) return o
       const next: Order = { ...o, status: newStatus, dispatchNote: cleanNote, updatedAt: now }
+      if (PAID_STATUSES.includes(newStatus) && !Array.isArray(o.itemCosts)) {
+        next.itemCosts = snapshotItemCosts(o.items, demoCosts)
+      }
       if (move === 'deduct') next.stockDeducted = true
       if (move === 'restore') {
         next.stockDeducted = false

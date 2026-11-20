@@ -24,6 +24,9 @@ service cloud.firestore {
     // Collection: bespokeRequests (Private PII — Admin Read/Manage, Guest Create)
     // Document ID: {requestId}
     //
+    // Collection: productCosts (Private — Admin only; cost prices kept off public products)
+    // Document ID: {productId}
+    //
     // Collection: expenses (Private — Admin only)
     // Document ID: {expenseId}
     //
@@ -172,13 +175,14 @@ service cloud.firestore {
         'deliveryZone', 'deliveryFee', 'address', 'notes',
         'items', 'subtotal', 'total', 'receiptUrl',
         'status', 'channel', 'paymentMethod', 'offlineSource', 'stockDeducted',
-        'createdAt', 'updatedAt'
+        'itemCosts', 'createdAt', 'updatedAt'
       ];
       let isOffline = 'channel' in data && data.channel == 'offline';
       let isGuestValid = !isOffline &&
         data.status == 'pending_verification' &&
         !('offlineSource' in data) &&
         (!('stockDeducted' in data) || data.stockDeducted == false) &&
+        !('itemCosts' in data) &&
         isValidOrderCore(data, false);
       let isAdminValid = isAdmin() &&
         isValidOrderStatus(data.status) &&
@@ -192,7 +196,7 @@ service cloud.firestore {
         'deliveryZone', 'deliveryFee', 'address', 'notes',
         'items', 'subtotal', 'total', 'receiptUrl',
         'status', 'channel', 'paymentMethod', 'offlineSource', 'stockDeducted',
-        'stockRestored', 'dispatchNote', 'createdAt', 'updatedAt'
+        'stockRestored', 'dispatchNote', 'itemCosts', 'createdAt', 'updatedAt'
       ];
       let isOffline = 'channel' in existing && existing.channel == 'offline';
       // stockDeducted / stockRestored track whether this order holds stock, so cancelling can
@@ -200,8 +204,9 @@ service cloud.firestore {
       return data.keys().hasOnly(allowedKeys) &&
         isValidOrderCore(data, isOffline) &&
         data.diff(existing).affectedKeys().hasOnly([
-          'status', 'dispatchNote', 'updatedAt', 'stockDeducted', 'stockRestored'
+          'status', 'dispatchNote', 'updatedAt', 'stockDeducted', 'stockRestored', 'itemCosts'
         ]) &&
+        (!('itemCosts' in data) || (data.itemCosts is list && data.itemCosts.size() == data.items.size())) &&
         isValidOrderStatus(data.status) &&
         validOptionalString(data, 'dispatchNote', 500) &&
         (!('stockRestored' in data) || data.stockRestored is bool) &&
@@ -269,6 +274,15 @@ service cloud.firestore {
         isValidTimestampOrString(data.updatedAt);
     }
 
+    // Cost of one piece, and per-option costs keyed by option id.
+    function isValidProductCost(data) {
+      return data.keys().hasOnly(['cost', 'variants', 'updatedAt']) &&
+        data.keys().hasAll(['updatedAt']) &&
+        (!('cost' in data) || (data.cost is number && data.cost >= 0 && data.cost < 1000000000)) &&
+        (!('variants' in data) || (data.variants is map && data.variants.size() <= 200)) &&
+        isValidTimestampOrString(data.updatedAt);
+    }
+
     function isValidSettings(data) {
       return data is map &&
         data.keys().size() >= 1 &&
@@ -322,6 +336,12 @@ service cloud.firestore {
       allow update: if isAdmin() &&
         isValidBespokeRequest(request.resource.data) &&
         request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isAdmin();
+    }
+
+    match /productCosts/{productId} {
+      allow get, list: if isAdmin();
+      allow create, update: if isAdmin() && isValidProductCost(request.resource.data);
       allow delete: if isAdmin();
     }
 

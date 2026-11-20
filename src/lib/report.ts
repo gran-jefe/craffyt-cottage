@@ -20,6 +20,7 @@ import {
   toDateInput,
 } from '@/lib/analytics'
 import { formatPhone } from '@/lib/phone'
+import { lineUnitCost, type CostBook } from '@/lib/costs'
 import { hasVariants, variantLabel, variantPrice } from '@/lib/variants'
 import type {
   BespokeRequest,
@@ -81,6 +82,8 @@ export interface ReportInput {
   expenses: Expense[]
   bespoke: BespokeRequest[]
   catalog: Catalog | null
+  /** Private cost prices; without them profit leaves out what the pieces cost. */
+  costs?: CostBook
   generatedAt: number
   generatedBy?: string
 }
@@ -95,6 +98,13 @@ export interface ReportSummary {
   averageOrderValue: number
   deliveryFees: number
   expenses: number
+  /** What the pieces sold cost to make or buy (known cost prices only). */
+  costOfGoods: number
+  /** Units sold with no cost price. */
+  uncostedUnits: number
+  /** Sales minus cost of pieces sold. */
+  grossProfit: number
+  /** Gross profit minus expenses. */
   profit: number
   pendingCount: number
   pendingValue: number
@@ -220,6 +230,7 @@ function groupTotals<T>(rows: T[], key: (r: T) => string, value: (r: T) => numbe
 export function buildBusinessReport(input: ReportInput, range: ReportRange): BusinessReport {
   const { orders, products, expenses, bespoke, catalog, generatedAt } = input
   const names = makeNamer(products, catalog)
+  const book: CostBook = input.costs ?? new Map()
 
   const placed = orders
     .filter((o) => inRange(orderTime(o), range))
@@ -233,6 +244,17 @@ export function buildBusinessReport(input: ReportInput, range: ReportRange): Bus
   const offlineSales = sales - onlineSales
   const itemsSold = paid.reduce((s, o) => s + unitsOf(o), 0)
   const deliveryFees = paid.reduce((s, o) => s + n(o.deliveryFee), 0)
+
+  // Every line with its unit cost: recorded at sale time, else today's cost price, else unknown.
+  const lines = placed.flatMap((o) =>
+    o.items.map((i, idx) => {
+      const unitCost = lineUnitCost(o, idx, i, book)
+      return { o, i, total: n(i.price) * n(i.quantity), unitCost, cost: unitCost === null ? null : unitCost * n(i.quantity) }
+    })
+  )
+  const paidLines = lines.filter(({ o }) => isPaid(o))
+  const costOfGoods = paidLines.reduce((s, l) => s + (l.cost ?? 0), 0)
+  const uncostedUnits = paidLines.reduce((s, l) => s + (l.cost === null ? n(l.i.quantity) : 0), 0)
 
   const expenseRows = expenses
     .map((e) => ({ e, share: expenseShare(e, range.start, range.end) }))
@@ -269,7 +291,10 @@ export function buildBusinessReport(input: ReportInput, range: ReportRange): Bus
     averageOrderValue: paid.length > 0 ? sales / paid.length : 0,
     deliveryFees,
     expenses: spent,
-    profit: sales - spent,
+    costOfGoods,
+    uncostedUnits,
+    grossProfit: sales - costOfGoods,
+    profit: sales - costOfGoods - spent,
     pendingCount: pending.length,
     pendingValue: pending.reduce((s, o) => s + n(o.total), 0),
     cancelledCount: cancelled.length,
@@ -320,8 +345,13 @@ export function buildBusinessReport(input: ReportInput, range: ReportRange): Bus
         ],
         rows: [
           ['Verified sales', naira(sales)],
+          ['Cost of pieces sold', naira(costOfGoods)],
+          ['Gross profit (sales minus cost of pieces)', naira(summary.grossProfit)],
           ['Expenses counted in this period', naira(spent)],
-          [summary.profit < 0 ? 'Loss' : 'Profit', naira(summary.profit)],
+          [summary.profit < 0 ? 'Loss (after costs and expenses)' : 'Profit (after costs and expenses)', naira(summary.profit)],
+          ...(uncostedUnits > 0
+            ? [[`Pieces sold with no cost price (their cost isn't counted)`, count(uncostedUnits)] as ReportCell[]]
+            : []),
         ],
       },
       {
@@ -370,7 +400,9 @@ export function buildBusinessReport(input: ReportInput, range: ReportRange): Bus
           ['Sales include delivery fees. Product revenue (Sales by product) is price x quantity only.'],
           ['Expenses covering a month or a year are spread evenly over their days, so a period counts only its share.'],
           ['Offline sales are dated by their sale date. Days run midnight to midnight, Nigeria time (WAT).'],
-          ['Profit is verified sales minus expenses. It does not include the cost of stock still on the shelf.'],
+          ['Cost of pieces sold uses the cost price recorded when each order was paid, or today\'s cost price for older orders.'],
+          ['Profit is verified sales minus the cost of pieces sold minus expenses. Stock still on the shelf isn\'t counted.'],
+          ['If bead and material purchases are entered as cost prices, don\'t also record them as expenses, or they count twice.'],
         ],
       },
     ],
@@ -426,9 +458,6 @@ export function buildBusinessReport(input: ReportInput, range: ReportRange): Bus
   }
 
   /* ----- Order lines ----- */
-  const lines = placed.flatMap((o) =>
-    o.items.map((i) => ({ o, i, total: n(i.price) * n(i.quantity) }))
-  )
   const linesSheet: ReportSheet = {
     name: 'Order lines',
     tables: [
@@ -445,9 +474,12 @@ export function buildBusinessReport(input: ReportInput, range: ReportRange): Bus
           { header: 'Qty', width: 6, format: 'number' },
           { header: 'Unit price', width: 13, format: 'naira' },
           { header: 'Line total', width: 13, format: 'naira' },
+          { header: 'Unit cost', width: 13, format: 'naira' },
+          { header: 'Line cost', width: 13, format: 'naira' },
+          { header: 'Line profit', width: 13, format: 'naira' },
           { header: 'Counts as sale', width: 13 },
         ],
-        rows: lines.map(({ o, i, total }) => [
+        rows: lines.map(({ o, i, total, unitCost, cost }) => [
           watDate(orderTime(o)),
           o.orderCode,
           ORDER_STATUS_LABELS[o.status] ?? o.status,
@@ -459,6 +491,9 @@ export function buildBusinessReport(input: ReportInput, range: ReportRange): Bus
           n(i.quantity),
           n(i.price),
           total,
+          unitCost,
+          cost,
+          cost === null ? null : total - cost,
           isPaid(o) ? 'Yes' : 'No',
         ]),
         emptyText: 'No order lines in this period.',
@@ -467,7 +502,6 @@ export function buildBusinessReport(input: ReportInput, range: ReportRange): Bus
   }
 
   /* ----- Sales by product / category / collection (paid only) ----- */
-  const paidLines = lines.filter(({ o }) => isPaid(o))
   const productRevenue = paidLines.reduce((s, l) => s + l.total, 0)
   const share = (v: number): FormattedCell => ({ value: productRevenue > 0 ? v / productRevenue : 0, format: 'percent' })
   const byProduct = groupTotals(
@@ -476,6 +510,15 @@ export function buildBusinessReport(input: ReportInput, range: ReportRange): Bus
     (l) => l.total,
     (l) => n(l.i.quantity)
   )
+  // Cost per product row; a row with any uncosted unit shows its cost as incomplete.
+  const productCost = new Map<string, { cost: number; missing: boolean }>()
+  for (const l of paidLines) {
+    const k = `${l.i.productId === 'custom' || !l.i.productId ? 'custom' : l.i.productId}\u0000${l.i.name}`
+    const c = productCost.get(k) ?? { cost: 0, missing: false }
+    if (l.cost === null) c.missing = true
+    else c.cost += l.cost
+    productCost.set(k, c)
+  }
   const byCategory = groupTotals(paidLines, (l) => names.category(l.i.productId), (l) => l.total, (l) => n(l.i.quantity))
   const byCollection = groupTotals(paidLines, (l) => names.collection(l.i.productId), (l) => l.total, (l) => n(l.i.quantity))
   const breakdownColumns = (first: string): ReportColumn[] => [
@@ -497,12 +540,29 @@ export function buildBusinessReport(input: ReportInput, range: ReportRange): Bus
           { header: 'Units', width: 8, format: 'number' },
           { header: 'Revenue', width: 14, format: 'naira' },
           { header: 'Share of product revenue', width: 22, format: 'percent' },
+          { header: 'Cost of pieces', width: 14, format: 'naira' },
+          { header: 'Profit', width: 14, format: 'naira' },
+          { header: 'Margin', width: 9, format: 'percent' },
         ],
         rows: byProduct.map((g) => {
           const [id, name] = g.name.split('\u0000')
-          return [name, names.category(id), names.collection(id), g.units, g.value, share(g.value)]
+          const c = productCost.get(g.name)
+          const known = c && !c.missing
+          return [
+            name,
+            names.category(id),
+            names.collection(id),
+            g.units,
+            g.value,
+            share(g.value),
+            known ? c.cost : 'No cost price',
+            known ? g.value - c.cost : null,
+            known && g.value > 0 ? { value: (g.value - c.cost) / g.value, format: 'percent' } : null,
+          ]
         }),
-        totals: byProduct.length ? ['Total', '', '', paidLines.reduce((s, l) => s + n(l.i.quantity), 0), productRevenue, share(productRevenue)] : undefined,
+        totals: byProduct.length
+          ? ['Total', '', '', paidLines.reduce((s, l) => s + n(l.i.quantity), 0), productRevenue, share(productRevenue), costOfGoods, '', '']
+          : undefined,
         emptyText: 'No paid sales in this period.',
       },
       {

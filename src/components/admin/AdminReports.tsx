@@ -1,5 +1,6 @@
 'use client'
 
+import type { CostBook } from '@/lib/costs'
 import React, { useMemo, useState } from 'react'
 import { AlertCircle, CheckCircle2, Download, FileSpreadsheet, Loader2 } from 'lucide-react'
 import { DAY_MS, expenseBounds, parseDateInput, startOfWatDay, toDateInput } from '@/lib/analytics'
@@ -14,6 +15,7 @@ interface Props {
   expenses: Expense[]
   bespoke: BespokeRequest[]
   catalog: Catalog | null
+  costs: CostBook
 }
 
 type Preset = 'this_month' | 'last_month' | 'this_year' | 'last_year' | 'all' | 'custom'
@@ -83,7 +85,7 @@ function resolve(
   }
 }
 
-export function AdminReports({ orders, products, expenses, bespoke, catalog }: Props) {
+export function AdminReports({ orders, products, expenses, bespoke, catalog, costs }: Props) {
   const { showToast } = useCart()
   const now = useMemo(() => Date.now(), [orders, products, expenses, bespoke])
   const today = toDateInput(now)
@@ -108,9 +110,9 @@ export function AdminReports({ orders, products, expenses, bespoke, catalog }: P
   const rangeError = 'error' in resolved ? resolved.error : ''
 
   const report = useMemo(
-    () => (range ? buildBusinessReport({ orders, products, expenses, bespoke, catalog, generatedAt: now }, range) : null),
+    () => (range ? buildBusinessReport({ orders, products, expenses, bespoke, catalog, costs, generatedAt: now }, range) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [orders, products, expenses, bespoke, catalog, now, range?.start, range?.end, range?.label]
+    [orders, products, expenses, bespoke, catalog, costs, now, range?.start, range?.end, range?.label]
   )
 
   async function handleDownload() {
@@ -119,7 +121,7 @@ export function AdminReports({ orders, products, expenses, bespoke, catalog }: P
     setGenerating(true)
     try {
       // Fresh timestamp so "Generated" and the stock snapshot reflect the moment of download.
-      const fresh = buildBusinessReport({ orders, products, expenses, bespoke, catalog, generatedAt: Date.now() }, range)
+      const fresh = buildBusinessReport({ orders, products, expenses, bespoke, catalog, costs, generatedAt: Date.now() }, range)
       const [{ default: ExcelJS }, { buildWorkbook, downloadBuffer }] = await Promise.all([
         import('exceljs'),
         import('@/lib/reportWorkbook'),
@@ -227,7 +229,7 @@ export function AdminReports({ orders, products, expenses, bespoke, catalog }: P
                 {[
                   ['Orders placed', s.ordersPlaced.toLocaleString('en-NG')],
                   ['Verified sales', formatNaira(Math.round(s.sales))],
-                  ['Expenses', formatNaira(Math.round(s.expenses))],
+                  ['Cost of pieces + expenses', formatNaira(Math.round(s.costOfGoods + s.expenses))],
                   [s.profit < 0 ? 'Loss' : 'Profit', formatNaira(Math.round(s.profit))],
                 ].map(([label, value]) => (
                   <div key={label} className="bg-white p-4">
