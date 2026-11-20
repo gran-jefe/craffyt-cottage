@@ -16,6 +16,7 @@ import {
   adjustProductStockBy,
   deleteProduct,
   saveProduct,
+  saveProductCost,
   seedInitialProducts,
   uploadMediaFile,
   usesCloudStorage,
@@ -26,11 +27,16 @@ import { hasVariants, newVariantId, sumStock, variantLabel, variantPrice } from 
 import { categoryOf, collectionName, collectionOf, sizeLabelFor } from '@/lib/catalog'
 import { SizeRangeGenerator, type GeneratedOption } from './SizeRangeGenerator'
 import type { Catalog, Product, ProductVariant } from '@/types/store'
+import type { CostBook } from '@/lib/costs'
 import { useDialogFocus } from '@/lib/useDialogFocus'
 
 interface Props {
   products: Product[]
   catalog: Catalog
+  /** Private cost prices, by product id. */
+  costs: CostBook
+  /** Costs couldn't be loaded: cost fields are locked so saving can't wipe them. */
+  costsError: boolean
   onRefresh: () => Promise<void>
 }
 
@@ -43,12 +49,29 @@ interface VariantDraft {
   size: string
   /** Blank means "same as the product price". */
   price: string
+  /** What one piece of this option costs you. Blank means "same as the product's cost". */
+  cost: string
   stock: string
   imageUrl: string
 }
 
 function emptyVariant(stock = '1'): VariantDraft {
-  return { id: newVariantId(), color: '', size: '', price: '', stock, imageUrl: '' }
+  return { id: newVariantId(), color: '', size: '', price: '', cost: '', stock, imageUrl: '' }
+}
+
+/** '' → null, otherwise a whole-naira amount; NaN when it isn't a valid amount. */
+function parseCost(text: string): number | null {
+  const t = text.trim()
+  if (!t) return null
+  const n = Number(t)
+  return Number.isFinite(n) && n >= 0 ? Math.round(n) : NaN
+}
+
+/** "₦12,000 profit (27%)" for a selling price and cost. */
+function marginText(price: number, cost: number): string {
+  const profit = price - cost
+  const pct = price > 0 ? Math.round((profit / price) * 100) : 0
+  return `${formatNaira(Math.abs(profit))} ${profit < 0 ? 'loss' : 'profit'} per piece (${pct}%)`
 }
 
 /** Firestore documents cap at 1 MB; inline (non-Storage) photos count towards it. */
@@ -63,6 +86,8 @@ interface ProductFormState {
   categoryId: string
   collectionId: string
   price: string
+  /** Private: what one piece costs you to make or buy. */
+  cost: string
   stock: string
   tag: string
   description: string
@@ -76,6 +101,7 @@ const EMPTY_FORM: ProductFormState = {
   categoryId: '',
   collectionId: '',
   price: '',
+  cost: '',
   stock: '5',
   tag: '',
   description: '',
@@ -107,6 +133,7 @@ function validateVariants(drafts: VariantDraft[]): string {
     const stock = Number(d.stock)
     if (!Number.isInteger(stock) || stock < 0) return `Stock for "${variantLabel(d)}" must be 0 or a whole number.`
     if (d.price.trim() && !(Number(d.price) > 0)) return `Price for "${variantLabel(d)}" must be above ₦0, or left blank.`
+    if (Number.isNaN(parseCost(d.cost))) return `Cost for "${variantLabel(d)}" must be ₦0 or more, or left blank.`
   }
   return ''
 }
@@ -120,7 +147,7 @@ function toVariants(drafts: VariantDraft[]): ProductVariant[] {
   })
 }
 
-export function AdminInventory({ products, catalog, onRefresh }: Props) {
+export function AdminInventory({ products, catalog, costs, costsError, onRefresh }: Props) {
   const { showToast } = useCart()
   const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState<ProductFormState>(EMPTY_FORM)
@@ -167,6 +194,7 @@ export function AdminInventory({ products, catalog, onRefresh }: Props) {
       categoryId: categoryOf(p, catalog)?.id ?? '',
       collectionId: collectionOf(p, catalog)?.id ?? '',
       price: String(p.price),
+      cost: costs.get(p.id)?.cost !== undefined ? String(costs.get(p.id)!.cost) : '',
       stock: String(p.stock),
       tag: p.tag,
       description: p.description,
@@ -179,6 +207,7 @@ export function AdminInventory({ products, catalog, onRefresh }: Props) {
         color: v.color,
         size: v.size,
         price: v.price ? String(v.price) : '',
+        cost: costs.get(p.id)?.variants?.[v.id] !== undefined ? String(costs.get(p.id)!.variants![v.id]) : '',
         stock: String(v.stock),
         imageUrl: v.imageUrl ?? '',
       })),
@@ -287,6 +316,11 @@ export function AdminInventory({ products, catalog, onRefresh }: Props) {
       setFormError('Please enter a valid price in Naira.')
       return
     }
+    const numCost = parseCost(form.cost)
+    if (Number.isNaN(numCost)) {
+      setFormError('Cost price must be ₦0 or more, or left blank.')
+      return
+    }
     if (!form.hasOptions && (!Number.isInteger(numStock) || numStock < 0)) {
       setFormError('Stock count must be 0 or a positive whole number.')
       return
@@ -337,16 +371,38 @@ export function AdminInventory({ products, catalog, onRefresh }: Props) {
     }
 
     setSaving(true)
+    let saved: Product
     try {
-      await saveProduct(input)
-      await onRefresh()
-      setModalOpen(false)
-      showToast(form.id ? 'Product updated.' : 'New product added to store!')
+      saved = await saveProduct(input)
     } catch {
       setFormError('Could not save product. Make sure your admin account has write permissions.')
+      setSaving(false)
+      return
+    }
+    // Costs live in a private record, saved after the product so a new product has its id.
+    let costSaved = true
+    if (!costsError) {
+      const variantCosts: Record<string, number> = {}
+      if (form.hasOptions) {
+        for (const d of form.variants) {
+          const c = parseCost(d.cost)
+          if (c !== null) variantCosts[d.id] = c
+        }
+      }
+      try {
+        await saveProductCost(saved.id, numCost, variantCosts)
+      } catch {
+        costSaved = false
+      }
+    }
+    try {
+      await onRefresh()
     } finally {
       setSaving(false)
     }
+    setModalOpen(false)
+    if (costSaved) showToast(form.id ? 'Product updated.' : 'New product added to store!')
+    else showToast('Product saved, but its cost price didn’t save. Open it and save again.', 'error')
   }
 
   async function handleStockDelta(product: Product, delta: number, variant?: ProductVariant) {
@@ -734,7 +790,7 @@ export function AdminInventory({ products, catalog, onRefresh }: Props) {
                 </div>
               </div>
 
-              <div className={`grid gap-3 ${form.hasOptions ? 'grid-cols-2' : 'grid-cols-3'}`}>
+              <div className={`grid gap-3 grid-cols-2 ${form.hasOptions ? 'sm:grid-cols-3' : 'sm:grid-cols-4'}`}>
                 <div>
                   <label htmlFor="prod-price" className="block text-xs font-bold mb-1">
                     {form.hasOptions ? 'Base price (₦) *' : 'Price (₦) *'}
@@ -747,6 +803,23 @@ export function AdminInventory({ products, catalog, onRefresh }: Props) {
                     onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
                     placeholder="45000"
                     className="w-full min-h-[44px] px-3 rounded-xl border border-[#E2DACA] bg-[#FAF8F4] text-sm"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="prod-cost" className="block text-xs font-bold mb-1">
+                    {form.hasOptions ? 'Base cost (₦)' : 'Cost price (₦)'}
+                  </label>
+                  <input
+                    id="prod-cost"
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    disabled={costsError}
+                    value={form.cost}
+                    onChange={(e) => setForm((f) => ({ ...f, cost: e.target.value }))}
+                    placeholder="e.g. 28000"
+                    aria-describedby="prod-cost-hint"
+                    className="w-full min-h-[44px] px-3 rounded-xl border border-[#E2DACA] bg-[#FAF8F4] text-sm disabled:opacity-60"
                   />
                 </div>
                 {!form.hasOptions && (
@@ -778,6 +851,23 @@ export function AdminInventory({ products, catalog, onRefresh }: Props) {
                   />
                 </div>
               </div>
+
+              <p id="prod-cost-hint" className="-mt-1 text-xs text-[#3F4F4C] leading-relaxed">
+                {costsError ? (
+                  <span className="text-[#B42318]">Cost prices couldn&apos;t be loaded, so they can&apos;t be edited right now. Refresh to try again.</span>
+                ) : (
+                  <>
+                    Cost price is what one piece costs you to make or buy (beads, materials, labour). Only admins see it;
+                    it&apos;s used to work out profit.
+                    {Number(form.price) > 0 && parseCost(form.cost) !== null && !Number.isNaN(parseCost(form.cost)) && (
+                      <strong className={`block mt-0.5 ${Number(form.price) < (parseCost(form.cost) ?? 0) ? 'text-[#B42318]' : 'text-[#0B3D3A]'}`}>
+                        {form.hasOptions ? 'At base price: ' : ''}
+                        {marginText(Number(form.price), parseCost(form.cost) ?? 0)}
+                      </strong>
+                    )}
+                  </>
+                )}
+              </p>
 
               {/* Colour & size options */}
               <div className="rounded-xl border border-[#E2DACA] p-3.5 space-y-3">
@@ -871,6 +961,22 @@ export function AdminInventory({ products, catalog, onRefresh }: Props) {
                                   onChange={(e) => updateVariant(v.id, { price: e.target.value })}
                                   placeholder={form.price ? `${form.price} (base)` : 'Base price'}
                                   className="w-full min-h-[44px] px-3 rounded-lg border border-[#E2DACA] bg-white text-sm tabular-nums"
+                                />
+                              </div>
+                              <div>
+                                <label htmlFor={`var-cost-${v.id}`} className="block text-xs font-semibold mb-1">
+                                  Cost (₦)
+                                </label>
+                                <input
+                                  id={`var-cost-${v.id}`}
+                                  type="number"
+                                  inputMode="numeric"
+                                  min="0"
+                                  disabled={costsError}
+                                  value={v.cost}
+                                  onChange={(e) => updateVariant(v.id, { cost: e.target.value })}
+                                  placeholder={form.cost ? `${form.cost} (base)` : 'Your cost'}
+                                  className="w-full min-h-[44px] px-3 rounded-lg border border-[#E2DACA] bg-white text-sm tabular-nums disabled:opacity-60"
                                 />
                               </div>
                               <div>

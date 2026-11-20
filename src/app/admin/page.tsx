@@ -1,5 +1,6 @@
 'use client'
 
+import type { CostBook } from '@/lib/costs'
 import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
@@ -20,6 +21,7 @@ import {
   fetchBespokeRequests,
   fetchCatalog,
   fetchExpenses,
+  fetchProductCosts,
   fetchOrders,
   fetchProducts,
   fetchStoreSettings,
@@ -134,6 +136,9 @@ function AdminPortal() {
   const [expensesError, setExpensesError] = useState(false)
   const [catalog, setCatalog] = useState<Catalog>(DEFAULT_CATALOG)
   const [catalogError, setCatalogError] = useState(false)
+  const [costs, setCosts] = useState<CostBook>(() => new Map())
+  /** Cost prices failed to load: profit leaves out cost of goods and says so. */
+  const [costsError, setCostsError] = useState(false)
   // null = the owner has never saved settings (checkout is paused until they do).
   const [settings, setSettings] = useState<StoreSettings | null>(null)
 
@@ -141,7 +146,7 @@ function AdminPortal() {
     setLoadingData(true)
     setLoadError(false)
     try {
-      const [prods, ords, bsp, cfg, exp, cat] = await Promise.all([
+      const [prods, ords, bsp, cfg, exp, cat, cst] = await Promise.all([
         fetchProducts(true),
         fetchOrders(),
         fetchBespokeRequests(),
@@ -160,7 +165,16 @@ function AdminPortal() {
             return { ok: false as const, value: DEFAULT_CATALOG }
           }
         ),
+        fetchProductCosts().then(
+          (value) => ({ ok: true as const, value }),
+          (err) => {
+            console.error(err)
+            return { ok: false as const, value: new Map() as CostBook }
+          }
+        ),
       ])
+      setCostsError(!cst.ok)
+      if (cst.ok) setCosts(cst.value)
       setCatalogError(!cat.ok)
       if (cat.ok) setCatalog(cat.value)
       setExpensesError(!exp.ok)
@@ -509,11 +523,13 @@ function AdminPortal() {
               bespoke={bespoke}
               expenses={expenses}
               expensesError={expensesError}
+              costs={costs}
+              costsError={costsError}
               refreshing={loadingData}
               onNavigate={navigateFromOverview}
             />
           ) : section === 'inventory' ? (
-            <AdminInventory products={products} catalog={catalog} onRefresh={loadAll} />
+            <AdminInventory products={products} catalog={catalog} costs={costs} costsError={costsError} onRefresh={loadAll} />
           ) : section === 'catalog' ? (
             <AdminCatalog
               // Remount after each save/refresh so the editor starts from what's stored.
@@ -535,7 +551,7 @@ function AdminPortal() {
           ) : section === 'expenses' ? (
             <AdminExpenses expenses={expenses} loadFailed={expensesError} onRefresh={loadAll} />
           ) : section === 'reports' ? (
-            <AdminReports orders={orders} products={products} expenses={expenses} bespoke={bespoke} catalog={catalog} />
+            <AdminReports orders={orders} products={products} expenses={expenses} bespoke={bespoke} catalog={catalog} costs={costs} />
           ) : section === 'bespoke' ? (
             <AdminBespoke requests={bespoke} onRefresh={loadAll} />
           ) : (

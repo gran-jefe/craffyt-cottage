@@ -11,6 +11,7 @@
  *   price × quantity only.
  * - Offline sales are dated by their sale date (stored as createdAt).
  */
+import { orderCost, type CostBook } from './costs'
 import type { BespokeRequest, BespokeStatus, Expense, ExpensePeriod, Order, OrderStatus, Product } from '@/types/store'
 import { hasVariants, lineKey, variantLabel } from './variants'
 
@@ -438,7 +439,11 @@ export interface DashboardData {
   allSales: Metric
   /** Expenses falling in the period, spread per day. */
   expenses: Metric
-  /** allSales minus expenses. */
+  /** What the pieces sold in the period cost to make or buy (known cost prices only). */
+  costOfGoods: Metric
+  /** Units sold in the period with no cost price, so their cost is missing from profit. */
+  uncostedUnits: number
+  /** allSales minus cost of goods minus expenses. */
   profit: Metric
   /** `orders` holds the number of expenses that touch the period. */
   expensesByCategory: BreakdownRow[]
@@ -471,7 +476,7 @@ export function computeDashboard(
   bespoke: BespokeRequest[],
   filters: DashboardFilters,
   now: number,
-  options: { topProductLimit?: number; expenses?: Expense[] } = {}
+  options: { topProductLimit?: number; expenses?: Expense[]; costs?: CostBook } = {}
 ): DashboardData {
   const topLimit = options.topProductLimit ?? 5
   const expenses = options.expenses ?? []
@@ -579,11 +584,25 @@ export function computeDashboard(
   const paidAll = (a: number, b: number) =>
     orders.filter((o) => isPaid(o) && inWindow(orderTime(o), a, b)).reduce((n, o) => n + (Number(o.total) || 0), 0)
   const spent = (a: number, b: number) => expenses.reduce((n, e) => n + expenseShare(e, a, b), 0)
+  const book = options.costs ?? new Map()
+  const goods = (a: number, b: number) => {
+    let cost = 0
+    let uncosted = 0
+    for (const o of orders) {
+      if (!isPaid(o) || !inWindow(orderTime(o), a, b)) continue
+      const c = orderCost(o, book)
+      cost += c.cost
+      uncosted += c.uncostedUnits
+    }
+    return { cost, uncosted }
+  }
   const hasPrev = range.prevStart !== null && range.prevEnd !== null
   const allSalesNow = paidAll(range.start, range.end)
   const spentNow = spent(range.start, range.end)
+  const goodsNow = goods(range.start, range.end)
   const allSalesPrev = hasPrev ? paidAll(range.prevStart!, range.prevEnd!) : null
   const spentPrev = hasPrev ? spent(range.prevStart!, range.prevEnd!) : null
+  const goodsPrev = hasPrev ? goods(range.prevStart!, range.prevEnd!).cost : null
 
   const byCategory = new Map<string, BreakdownRow>()
   for (const e of expenses) {
@@ -601,9 +620,12 @@ export function computeDashboard(
     range,
     allSales: { value: allSalesNow, previous: allSalesPrev },
     expenses: { value: spentNow, previous: spentPrev },
+    costOfGoods: { value: goodsNow.cost, previous: goodsPrev },
+    uncostedUnits: goodsNow.uncosted,
     profit: {
-      value: allSalesNow - spentNow,
-      previous: allSalesPrev !== null && spentPrev !== null ? allSalesPrev - spentPrev : null,
+      value: allSalesNow - goodsNow.cost - spentNow,
+      previous:
+        allSalesPrev !== null && spentPrev !== null && goodsPrev !== null ? allSalesPrev - goodsPrev - spentPrev : null,
     },
     expensesByCategory,
     sales: { value: cur.sales, previous: prev ? prev.sales : null },
