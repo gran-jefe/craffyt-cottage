@@ -34,6 +34,7 @@ import { hasVariants, priceRange, uniqueOptions } from '@/lib/variants'
 import { ProductOptionsDialog } from '@/components/ProductOptionsDialog'
 import { categoryOf, collectionName, collectionOf, sizeLabelFor } from '@/lib/catalog'
 import { useCatalog } from '@/lib/useCatalog'
+import { HeroSlideshow } from '@/components/HeroSlideshow'
 import type { Product, StoreSettings } from '@/types/store'
 
 /** "3 colours · 2 sizes" for the product card. */
@@ -132,7 +133,7 @@ export function StorefrontClient() {
   const [reloadKey, setReloadKey] = useState(0)
 
   // Catalog filters ('all' = no filter). Category and collection hold catalogue ids.
-  const { catalog } = useCatalog()
+  const { catalog, loaded: catalogLoaded } = useCatalog()
   const searchParams = useSearchParams()
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [selectedCollection, setSelectedCollection] = useState('all')
@@ -293,11 +294,42 @@ export function StorefrontClient() {
     return out
   }, [filtersActive, sort, categoryTabs, products, catalog])
 
-  /** Featured pieces for the hero strip: featured first, then newest, in stock only. */
+  /** Featured pieces for the hero slideshow: featured first, then newest, in stock only. */
   const heroPieces = useMemo(
-    () => sortProducts(products.filter((p) => p.stock > 0), 'featured').slice(0, 4),
+    () => sortProducts(products.filter((p) => p.stock > 0), 'featured').slice(0, 6),
     [products]
   )
+
+  /**
+   * The collection the hero leads with: the first one in the admin's Catalogue order that has
+   * pieces in the shop. Reorder collections in Catalogue to change it.
+   */
+  const heroCollection = useMemo(
+    () =>
+      catalog.collections.find((c) => products.some((p) => collectionOf(p, catalog)?.id === c.id)) ??
+      catalog.collections[0] ??
+      null,
+    [catalog, products]
+  )
+  const heroCollectionName = heroCollection
+    ? /collection$/i.test(heroCollection.name.trim())
+      ? heroCollection.name.trim()
+      : `${heroCollection.name.trim()} Collection`
+    : ''
+
+  /** "Bags, waist beads and neckpieces", from the catalogue, so new categories show up here. */
+  const categoryPhrase = useMemo(() => {
+    const names = catalog.categories.map((c, i) => (i === 0 ? c.name : c.name.toLowerCase()))
+    if (names.length === 0) return 'Bags and accessories'
+    return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+  }, [catalog.categories])
+
+  function openCollection(id: string) {
+    setSelectedCategory('all')
+    setSelectedCollection(id)
+    setSearchQuery('')
+    scrollToShop()
+  }
 
   function clearFilters() {
     setSearchQuery('')
@@ -463,48 +495,57 @@ export function StorefrontClient() {
 
   return (
     <main>
-      {/* HERO: the logo's deep teal, one brand moment, type first */}
-      <section className="relative overflow-hidden bg-[#062E2C] text-[#FAF8F4]">
+      {/* HERO: the logo's deep teal, one brand moment. Words and actions on the left, the pieces
+          on the right (below on phones). Collection and categories come from the admin's Catalogue. */}
+      <section aria-labelledby="hero-heading" className="relative overflow-hidden bg-[#062E2C] text-[#FAF8F4]">
         <div aria-hidden="true" className="hero-silk absolute inset-0" />
-        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 pt-14 pb-10 sm:pt-20 sm:pb-14 lg:pt-24 lg:pb-16">
-          <div className="max-w-2xl mx-auto text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#E6C975]">The Prima Collection</p>
-            <h1 className="mt-5 font-serif-display font-normal text-[min(42px,10.4vw)] sm:text-6xl lg:text-[68px] leading-[1.06] tracking-[-0.01em] text-white text-balance">
-              {/* Keep "Hand-beaded bags," together on one line; the gold phrase always starts the next. */}
-              <span className="whitespace-nowrap">Hand-beaded bags,</span>
+        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 pt-12 pb-12 sm:pt-16 sm:pb-16 lg:py-20 grid gap-10 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-16">
+          <div className="max-w-xl">
+            <p
+              className={`h-4 text-xs font-semibold uppercase tracking-[0.22em] text-[#E6C975] transition-opacity duration-200 ${
+                catalogLoaded ? 'opacity-100' : 'opacity-0'
+              }`}
+            >
+              {heroCollectionName || 'Crafty Cottage'}
+            </p>
+            <h1
+              id="hero-heading"
+              className="mt-4 font-serif-display font-normal text-[min(44px,11vw)] sm:text-6xl lg:text-[64px] leading-[1.05] tracking-[-0.01em] text-white"
+            >
+              Beaded by hand,
               <br />
               <em className="italic text-[#E6C975]">made in Nigeria.</em>
             </h1>
-            <p className="mt-6 text-base sm:text-lg text-[#CFC6B2] leading-relaxed max-w-md mx-auto">
-              Sculptural heart bags, pearl carryalls and fringe clutches, beaded piece by piece.
+            <p className="mt-5 text-base sm:text-lg text-[#CFC6B2] leading-relaxed max-w-md">
+              {categoryPhrase}, made by women, for women.
             </p>
-            <div className="mt-9 flex flex-col min-[420px]:flex-row items-center justify-center gap-2 min-[420px]:gap-7">
+
+            <div className="mt-8 flex flex-col min-[420px]:flex-row min-[420px]:items-center gap-3 min-[420px]:gap-6">
               <a
-                href="#shop"
-                className="w-full min-[420px]:w-auto min-h-[48px] px-8 rounded-xl bg-[#E6C975] hover:bg-[#F1DA9A] active:bg-[#D9B95C] text-[#04201F] text-sm font-semibold tracking-wide inline-flex items-center justify-center transition-colors duration-150"
+                href={heroCollection ? `/?collection=${encodeURIComponent(heroCollection.id)}#shop` : '#shop'}
+                onClick={(e) => {
+                  if (!heroCollection) return
+                  e.preventDefault()
+                  openCollection(heroCollection.id)
+                }}
+                className="min-h-[48px] px-7 rounded-xl bg-[#E6C975] hover:bg-[#F1DA9A] active:bg-[#D9B95C] text-[#04201F] text-sm font-semibold tracking-wide inline-flex items-center justify-center transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[#062E2C] focus-visible:ring-[#E6C975]"
               >
-                Shop the collection
+                {heroCollection ? `Shop the ${heroCollectionName}` : 'Shop the collection'}
               </a>
               <a
                 href="#custom"
-                className="min-h-[44px] inline-flex items-center gap-1.5 text-sm font-semibold text-[#FAF8F4] underline-offset-4 hover:underline"
+                className="min-h-[44px] self-start min-[420px]:self-auto inline-flex items-center gap-1.5 text-sm font-semibold text-[#FAF8F4] underline-offset-4 hover:underline rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E6C975]"
               >
                 <span>Commission a custom piece</span>
                 <ArrowRight className="w-4 h-4" aria-hidden="true" />
               </a>
             </div>
 
-            {/* Straight to what they came for: every category in the catalogue, always visible.
-                An empty one opens on a "none yet, we can make one" message, never a dead end. */}
+            {/* Straight to what they came for. An empty category opens on a "none yet, we can
+                make one" message, never a dead end. */}
             {catalog.categories.length > 0 && (
-              <nav aria-labelledby="hero-categories-label" className="mt-10">
-                <p
-                  id="hero-categories-label"
-                  className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#CFC6B2]"
-                >
-                  Shop by category
-                </p>
-                <ul className="mt-3 flex flex-wrap justify-center gap-2">
+              <nav aria-label="Categories" className="mt-7 pt-4 sm:mt-9 sm:pt-6 border-t border-white/10">
+                <ul className="flex flex-wrap gap-x-1 gap-y-1 -ml-3">
                   {catalog.categories.map((c) => (
                     <li key={c.id}>
                       <a
@@ -513,9 +554,13 @@ export function StorefrontClient() {
                           e.preventDefault()
                           openCategory(c.id)
                         }}
-                        className="min-h-[44px] px-5 rounded-full border border-white/25 bg-white/[0.04] hover:border-[#E6C975] hover:text-[#E6C975] active:bg-white/10 text-sm font-medium text-[#FAF8F4] inline-flex items-center transition-colors duration-150"
+                        className="group min-h-[44px] px-3 rounded-lg inline-flex items-center gap-1.5 text-sm font-medium text-[#FAF8F4] hover:text-[#E6C975] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E6C975]"
                       >
                         {c.name}
+                        <ArrowRight
+                          className="w-3.5 h-3.5 text-[#E6C975]/70 transition-transform duration-150 motion-safe:group-hover:translate-x-0.5"
+                          aria-hidden="true"
+                        />
                       </a>
                     </li>
                   ))}
@@ -524,64 +569,22 @@ export function StorefrontClient() {
             )}
           </div>
 
-          {/* Featured pieces: small and sharp, since photos are shown near their real size */}
-          {(loadingProducts || heroPieces.length > 0) && (
-            <div className="mt-12 sm:mt-16">
-              <ul
-                aria-label="Featured pieces"
-                aria-busy={loadingProducts}
-                className="-mx-4 px-4 scroll-px-4 sm:mx-0 sm:px-0 sm:scroll-px-0 flex sm:justify-center gap-3 sm:gap-5 overflow-x-auto no-scrollbar snap-x"
-              >
-                {loadingProducts
-                  ? [1, 2, 3, 4].map((n) => (
-                      <li key={n} className="shrink-0 w-[124px] sm:w-[148px]">
-                        <div className="aspect-square rounded-xl bg-white/[0.06] animate-pulse" />
-                        <div className="mt-3 h-4 w-3/4 rounded bg-white/[0.06]" />
-                      </li>
-                    ))
-                  : heroPieces.map((p) => {
-                      const range = priceRange(p)
-                      return (
-                        <li key={p.id} className="shrink-0 w-[124px] sm:w-[148px] snap-start">
-                          <button
-                            type="button"
-                            onClick={() => viewInShop(p)}
-                            aria-label={`View ${p.name} in the shop`}
-                            className="group w-full text-left rounded-xl"
-                          >
-                            <span className="block aspect-square rounded-xl overflow-hidden bg-[#0B3D3A] ring-1 ring-white/10">
-                              <img
-                                src={p.imageUrl}
-                                alt=""
-                                width={148}
-                                height={148}
-                                className="w-full h-full object-cover transition-transform duration-200 motion-safe:group-hover:scale-[1.04]"
-                              />
-                            </span>
-                            <span className="mt-3 block font-serif-display text-[15px] leading-snug text-white truncate">
-                              {p.name}
-                            </span>
-                            <span className="block text-xs text-[#CFC6B2] tabular-nums">
-                              {range.min !== range.max ? `From ${formatNaira(range.min)}` : formatNaira(range.min)}
-                            </span>
-                          </button>
-                        </li>
-                      )
-                    })}
-              </ul>
-            </div>
-          )}
-
-          <ul className="mt-12 pt-6 border-t border-white/10 flex flex-wrap justify-center gap-x-6 gap-y-2 text-[13px] text-[#CFC6B2]">
-            {['Beaded by hand', 'Pay by bank transfer', 'Delivery across Nigeria'].map((item) => (
-              <li key={item} className="flex items-center gap-2">
-                <span aria-hidden="true" className="w-1 h-1 rounded-full bg-[#E6C975]" />
-                {item}
-              </li>
-            ))}
-          </ul>
+          {/* Featured pieces as a slideshow beside the words (below them on phones) */}
+          <HeroSlideshow pieces={heroPieces} loading={loadingProducts} onView={viewInShop} />
         </div>
       </section>
+
+      {/* Reassurance, out of the hero so it doesn't compete with the headline */}
+      <div className="border-b border-[#E2DACA] bg-[#F4EFE6]">
+        <ul className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap justify-center gap-x-6 gap-y-1.5 text-[13px] font-medium text-[#3F4F4C]">
+          {['Beaded by hand', 'Pay by bank transfer', 'Delivery across Nigeria'].map((item) => (
+            <li key={item} className="flex items-center gap-2">
+              <span aria-hidden="true" className="w-1 h-1 rounded-full bg-[#0B3D3A]" />
+              {item}
+            </li>
+          ))}
+        </ul>
+      </div>
 
       {/* SHOP CATALOG */}
       <section id="shop" aria-labelledby="shop-heading" className="py-14 sm:py-20">
