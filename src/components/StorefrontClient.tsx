@@ -577,7 +577,7 @@ export function StorefrontClient() {
       {/* Reassurance, out of the hero so it doesn't compete with the headline */}
       <div className="border-b border-[#E2DACA] bg-[#F4EFE6]">
         <ul className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap justify-center gap-x-6 gap-y-1.5 text-[13px] font-medium text-[#3F4F4C]">
-          {['Beaded by hand', 'Pay by bank transfer', 'Delivery across Nigeria'].map((item) => (
+          {['Beaded by hand', 'Pay by bank transfer', 'Delivery worldwide'].map((item) => (
             <li key={item} className="flex items-center gap-2">
               <span aria-hidden="true" className="w-1 h-1 rounded-full bg-[#0B3D3A]" />
               {item}
