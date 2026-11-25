@@ -244,7 +244,7 @@ export function ProductOptionsDialog({ product, eyebrow, sizeLabel = 'Size', onC
               onClick={() => selected && onAdd(product, selected)}
               className="w-full min-h-[48px] px-6 rounded-xl bg-[#0B3D3A] hover:bg-[#04201F] active:bg-[#021817] text-white text-sm font-semibold tracking-wide transition-colors duration-150 disabled:bg-[#E8DEC8] disabled:text-[#56625F] disabled:cursor-not-allowed"
             >
-              {canAdd ? `Add to bag · ${formatNaira(price)}` : 'Unavailable'}
+              {canAdd ? `Add to cart · ${formatNaira(price)}` : 'Unavailable'}
             </button>
             </div>
           </div>

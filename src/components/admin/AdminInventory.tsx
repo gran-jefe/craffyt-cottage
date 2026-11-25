@@ -883,7 +883,7 @@ export function AdminInventory({ products, catalog, costs, costsError, onRefresh
                       Comes in different colours or sizes
                     </span>
                     <span className="block text-xs text-[#3F4F4C] leading-relaxed">
-                      Customers pick an option before adding to bag. Each option has its own stock, and can
+                      Customers pick an option before adding to cart. Each option has its own stock, and can
                       have its own price and photo.
                     </span>
                   </span>

@@ -8,7 +8,7 @@ import {
   MessageCircle,
   Check,
   Search,
-  SlidersHorizontal,
+  ChevronDown,
   ChevronRight,
   X,
   Phone,
@@ -311,11 +311,25 @@ export function StorefrontClient() {
       null,
     [catalog, products]
   )
-  const heroCollectionName = heroCollection
-    ? /collection$/i.test(heroCollection.name.trim())
-      ? heroCollection.name.trim()
-      : `${heroCollection.name.trim()} Collection`
+  /** "Prima Collection" → "PRIMA": the collection reads as a named range, not the brand. */
+  const heroCollectionShort = heroCollection
+    ? heroCollection.name.trim().replace(/\s*collection$/i, '').toUpperCase()
     : ''
+  const heroCollectionName = heroCollectionShort ? `${heroCollectionShort} Collection` : ''
+
+  /** One photo per category for the "shop by category" cards: featured, in stock first. */
+  const categoryCards = useMemo(() => {
+    const sorted = sortProducts(products, 'featured')
+    return catalog.categories.map((c) => ({
+      id: c.id,
+      name: c.name,
+      image: sorted.find((p) => categoryOf(p, catalog)?.id === c.id && p.imageUrl)?.imageUrl,
+    }))
+  }, [products, catalog])
+
+  /** Unfiltered heading: name the collection when every piece belongs to it, so PRIMA reads as one range. */
+  const allInHeroCollection =
+    Boolean(heroCollection) && products.length > 0 && products.every((p) => collectionOf(p, catalog)?.id === heroCollection?.id)
 
   /** "Bags, waist beads and neckpieces", from the catalogue, so new categories show up here. */
   const categoryPhrase = useMemo(() => {
@@ -467,7 +481,7 @@ export function StorefrontClient() {
                     ? `${product.name} is sold out`
                     : withOptions
                     ? `Choose options for ${product.name}`
-                    : `Add ${product.name} to bag`
+                    : `Add ${product.name} to cart`
                 }
                 aria-haspopup={withOptions ? 'dialog' : undefined}
                 onClick={() => {
@@ -484,7 +498,7 @@ export function StorefrontClient() {
                     : 'border-[#0B3D3A] text-[#0B3D3A] hover:bg-[#0B3D3A] hover:text-white active:bg-[#04201F] active:text-white'
                 }`}
               >
-                {soldOut ? 'Sold out' : withOptions ? 'Choose options' : 'Add to bag'}
+                {soldOut ? 'Sold out' : withOptions ? 'Choose options' : 'Add to cart'}
               </button>
             </div>
           </div>
@@ -501,26 +515,31 @@ export function StorefrontClient() {
         <div aria-hidden="true" className="hero-silk absolute inset-0" />
         <div className="relative max-w-6xl mx-auto px-4 sm:px-6 pt-12 pb-12 sm:pt-16 sm:pb-16 lg:py-20 grid gap-10 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-16">
           <div className="max-w-xl">
+            <h1
+              id="hero-heading"
+              className="font-serif-display font-normal text-[min(44px,11vw)] sm:text-6xl lg:text-[64px] leading-[1.05] tracking-[-0.01em] text-white"
+            >
+              Handcrafted
+              <br />
+              <em className="italic text-[#E6C975]">to be yours.</em>
+            </h1>
             <p
-              className={`h-4 text-xs font-semibold uppercase tracking-[0.22em] text-[#E6C975] transition-opacity duration-200 ${
+              className={`mt-5 text-base sm:text-lg text-[#CFC6B2] leading-relaxed max-w-md transition-opacity duration-200 ${
                 catalogLoaded ? 'opacity-100' : 'opacity-0'
               }`}
             >
-              {heroCollectionName || 'Crafty Cottage'}
-            </p>
-            <h1
-              id="hero-heading"
-              className="mt-4 font-serif-display font-normal text-[min(44px,11vw)] sm:text-6xl lg:text-[64px] leading-[1.05] tracking-[-0.01em] text-white"
-            >
-              Beaded by hand,
-              <br />
-              <em className="italic text-[#E6C975]">made in Nigeria.</em>
-            </h1>
-            <p className="mt-5 text-base sm:text-lg text-[#CFC6B2] leading-relaxed max-w-md">
-              {categoryPhrase}, made by women, for women.
+              {heroCollectionShort ? (
+                <>
+                  Introducing <strong className="font-semibold text-white">{heroCollectionShort}</strong>, a collection of{' '}
+                  {categoryPhrase.charAt(0).toLowerCase() + categoryPhrase.slice(1)} made by women, for women.
+                </>
+              ) : (
+                <>{categoryPhrase}, handcrafted by women, for women.</>
+              )}
             </p>
 
-            <div className="mt-8 flex flex-col min-[420px]:flex-row min-[420px]:items-center gap-3 min-[420px]:gap-6">
+            {/* Both actions share the headline's left edge on every screen size. */}
+            <div className="mt-8 flex flex-col items-start sm:flex-row sm:items-center gap-3 sm:gap-6">
               <a
                 href={heroCollection ? `/?collection=${encodeURIComponent(heroCollection.id)}#shop` : '#shop'}
                 onClick={(e) => {
@@ -528,45 +547,19 @@ export function StorefrontClient() {
                   e.preventDefault()
                   openCollection(heroCollection.id)
                 }}
-                className="min-h-[48px] px-7 rounded-xl bg-[#E6C975] hover:bg-[#F1DA9A] active:bg-[#D9B95C] text-[#04201F] text-sm font-semibold tracking-wide inline-flex items-center justify-center transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[#062E2C] focus-visible:ring-[#E6C975]"
+                className="w-full sm:w-auto min-h-[48px] px-5 rounded-xl bg-[#E6C975] hover:bg-[#F1DA9A] active:bg-[#D9B95C] text-[#04201F] text-sm font-semibold tracking-wide inline-flex items-center justify-start gap-2 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[#062E2C] focus-visible:ring-[#E6C975]"
               >
-                {heroCollection ? `Shop the ${heroCollectionName}` : 'Shop the collection'}
+                <span>{heroCollection ? `Shop the ${heroCollectionName}` : 'Shop the collection'}</span>
+                <ArrowRight className="w-4 h-4" aria-hidden="true" />
               </a>
               <a
                 href="#custom"
-                className="min-h-[44px] self-start min-[420px]:self-auto inline-flex items-center gap-1.5 text-sm font-semibold text-[#FAF8F4] underline-offset-4 hover:underline rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E6C975]"
+                className="min-h-[44px] inline-flex items-center gap-1.5 text-sm font-semibold text-[#FAF8F4] underline-offset-4 hover:underline rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E6C975]"
               >
                 <span>Commission a custom piece</span>
                 <ArrowRight className="w-4 h-4" aria-hidden="true" />
               </a>
             </div>
-
-            {/* Straight to what they came for. An empty category opens on a "none yet, we can
-                make one" message, never a dead end. */}
-            {catalog.categories.length > 0 && (
-              <nav aria-label="Categories" className="mt-7 pt-4 sm:mt-9 sm:pt-6 border-t border-white/10">
-                <ul className="flex flex-wrap gap-x-1 gap-y-1 -ml-3">
-                  {catalog.categories.map((c) => (
-                    <li key={c.id}>
-                      <a
-                        href={`/?category=${encodeURIComponent(c.id)}#shop`}
-                        onClick={(e) => {
-                          e.preventDefault()
-                          openCategory(c.id)
-                        }}
-                        className="group min-h-[44px] px-3 rounded-lg inline-flex items-center gap-1.5 text-sm font-medium text-[#FAF8F4] hover:text-[#E6C975] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E6C975]"
-                      >
-                        {c.name}
-                        <ArrowRight
-                          className="w-3.5 h-3.5 text-[#E6C975]/70 transition-transform duration-150 motion-safe:group-hover:translate-x-0.5"
-                          aria-hidden="true"
-                        />
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </nav>
-            )}
           </div>
 
           {/* Featured pieces as a slideshow beside the words (below them on phones) */}
@@ -574,22 +567,57 @@ export function StorefrontClient() {
         </div>
       </section>
 
-      {/* Reassurance, out of the hero so it doesn't compete with the headline */}
-      <div className="border-b border-[#E2DACA] bg-[#F4EFE6]">
-        <ul className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap justify-center gap-x-6 gap-y-1.5 text-[13px] font-medium text-[#3F4F4C]">
-          {['Beaded by hand', 'Pay by bank transfer', 'Delivery worldwide'].map((item) => (
-            <li key={item} className="flex items-center gap-2">
-              <span aria-hidden="true" className="w-1 h-1 rounded-full bg-[#0B3D3A]" />
-              {item}
-            </li>
-          ))}
-        </ul>
-      </div>
+      {/* Shop by category: a photo for each, taken from its featured piece. An empty category
+          opens on a "none yet, we can make one" message, never a dead end. */}
+      {catalog.categories.length > 0 && (
+        <nav aria-label="Shop by category" className="bg-[#FAF8F4] pt-4 sm:pt-8">
+          <ul className="max-w-6xl mx-auto px-4 sm:px-6 grid gap-3 sm:grid-cols-3">
+            {categoryCards.map((c) => (
+              <li key={c.id}>
+                <a
+                  href={`/?category=${encodeURIComponent(c.id)}#shop`}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    openCategory(c.id)
+                  }}
+                  className="group grid grid-cols-[1fr_minmax(0,1.1fr)] min-h-[112px] sm:min-h-[132px] rounded-xl overflow-hidden bg-[#F4EFE6] hover:bg-[#EDE5D6] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B3D3A] focus-visible:ring-offset-2"
+                >
+                  <span className="p-4 sm:p-5 flex flex-col justify-center">
+                    <span className="font-serif-display text-xl sm:text-2xl font-medium text-[#0F1F1D]">{c.name}</span>
+                    <span className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-[#3F4F4C] group-hover:text-[#0B3D3A]">
+                      Shop here
+                      <ArrowRight
+                        className="w-3.5 h-3.5 transition-transform duration-150 motion-safe:group-hover:translate-x-0.5"
+                        aria-hidden="true"
+                      />
+                    </span>
+                  </span>
+                  <span className="relative bg-[#E8DEC8]">
+                    {c.image && (
+                      <img
+                        src={c.image}
+                        alt=""
+                        width={300}
+                        height={260}
+                        loading="lazy"
+                        decoding="async"
+                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-200 motion-safe:group-hover:scale-[1.03]"
+                      />
+                    )}
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
 
       {/* SHOP CATALOG */}
       <section id="shop" aria-labelledby="shop-heading" className="py-14 sm:py-20">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           {/* Breadcrumb: where the visitor is, and one tap back up */}
+          {/* Only once the visitor has gone into a category or collection; at the top it would just say "Shop". */}
+          {(activeCategory || activeCollection) && (
           <nav aria-label="Breadcrumb" className="mb-3">
             <ol className="flex flex-wrap items-center gap-x-1.5 text-sm text-[#3F4F4C]">
               {[
@@ -624,13 +652,16 @@ export function StorefrontClient() {
               ))}
             </ol>
           </nav>
+          )}
           <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2 mb-6">
             <div>
               <h2
                 id="shop-heading"
                 className="font-serif-display font-medium text-3xl sm:text-4xl tracking-[-0.01em] text-[#04201F]"
               >
-                {activeCollection?.name ?? activeCategory?.name ?? 'The collection'}
+                {activeCollection?.name ??
+                  activeCategory?.name ??
+                  (allInHeroCollection ? `The ${heroCollectionName}` : 'All pieces')}
               </h2>
               {activeCollection?.description && (
                 <p className="mt-2 text-sm text-[#3F4F4C] leading-relaxed max-w-xl">{activeCollection.description}</p>
@@ -677,15 +708,11 @@ export function StorefrontClient() {
                 Sort by
               </label>
               <div className="relative flex-1 md:flex-none">
-                <SlidersHorizontal
-                  aria-hidden="true"
-                  className="w-4 h-4 text-[#3F4F4C] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
-                />
                 <select
                   id="catalog-sort"
                   value={sort}
                   onChange={(e) => setSort(e.target.value as SortKey)}
-                  className="w-full md:w-52 min-h-[44px] pl-10 pr-8 rounded-xl bg-white border border-[#E2DACA] hover:border-[#C9BEA6] text-sm font-medium text-[#0F1F1D] transition-colors duration-150"
+                  className="appearance-none w-full md:w-52 min-h-[44px] pl-4 pr-10 rounded-xl bg-white border border-[#E2DACA] hover:border-[#C9BEA6] text-sm font-medium text-[#0F1F1D] transition-colors duration-150"
                 >
                   {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
                     <option key={k} value={k}>
@@ -693,6 +720,11 @@ export function StorefrontClient() {
                     </option>
                   ))}
                 </select>
+                {/* One icon only: the select's own arrow is hidden (appearance-none) and drawn here. */}
+                <ChevronDown
+                  aria-hidden="true"
+                  className="w-4 h-4 text-[#3F4F4C] absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                />
               </div>
               <button
                 type="button"

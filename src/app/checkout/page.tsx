@@ -216,7 +216,7 @@ export default function CheckoutPage() {
         setCartChanges(changes)
         setErrors({
           submit:
-            'Your bag was updated with current prices and stock. Please check the new total, and transfer the difference if it changed, before placing your order.',
+            'Your cart was updated with current prices and stock. Please check the new total, and transfer the difference if it changed, before placing your order.',
         })
         setSubmitting(false)
         return
@@ -346,7 +346,7 @@ export default function CheckoutPage() {
               </div>
               <div className="space-y-1.5">
                 <h1 className="font-serif-display text-2xl font-bold text-[#0F1F1D]">
-                  Your bag is empty
+                  Your cart is empty
                 </h1>
                 <p className="text-sm text-[#3F4F4C]">
                   Add a beaded bag from the Prima collection before heading to checkout.
@@ -383,11 +383,11 @@ export default function CheckoutPage() {
                   className="p-4 rounded-xl bg-amber-50 border border-amber-300 text-sm text-amber-950 space-y-2"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <p className="font-bold">Your bag was updated with current prices and stock</p>
+                    <p className="font-bold">Your cart was updated with current prices and stock</p>
                     <button
                       type="button"
                       onClick={() => setCartChanges([])}
-                      aria-label="Dismiss bag update notice"
+                      aria-label="Dismiss cart update notice"
                       className="min-w-[44px] min-h-[44px] -m-2.5 rounded-lg flex items-center justify-center hover:bg-amber-100"
                     >
                       <X className="w-4 h-4" />
