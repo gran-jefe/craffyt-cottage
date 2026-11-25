@@ -79,11 +79,11 @@ export function SiteHeader() {
           <button
             type="button"
             onClick={() => setDrawerOpen(true)}
-            aria-label={`Open shopping bag, ${totalCount} ${totalCount === 1 ? 'item' : 'items'}`}
+            aria-label={`Open cart, ${totalCount} ${totalCount === 1 ? 'item' : 'items'}`}
             className="relative min-h-[44px] min-w-[44px] px-2.5 sm:px-3 rounded-xl text-[#0F1F1D] hover:bg-[#F4EFE6] active:bg-[#E8DEC8] text-sm font-medium flex items-center justify-center gap-2 transition-colors duration-150"
           >
             <ShoppingBag className="w-5 h-5" aria-hidden="true" />
-            <span className="hidden sm:inline">Bag</span>
+            <span className="hidden sm:inline">Cart</span>
             {totalCount > 0 && (
               <span
                 aria-hidden="true"

@@ -48,13 +48,13 @@ export function CartDrawer() {
           <div className="flex items-center gap-2.5">
             <ShoppingBag className="w-5 h-5 text-[#0B3D3A]" />
             <h2 id="cart-drawer-title" className="font-serif-display text-lg font-bold text-[#0F1F1D]">
-              Your shopping bag ({totalCount})
+              Your cart ({totalCount})
             </h2>
           </div>
           <button
             type="button"
             onClick={() => setDrawerOpen(false)}
-            aria-label="Close shopping bag"
+            aria-label="Close cart"
             className="min-w-[44px] min-h-[44px] rounded-xl border border-[#E2DACA] text-[#3F4F4C] hover:text-[#0F1F1D] hover:bg-[#F4EFE6] flex items-center justify-center transition-colors"
           >
             <X className="w-5 h-5" />
@@ -70,7 +70,7 @@ export function CartDrawer() {
               </div>
               <div className="space-y-1">
                 <p className="font-serif-display text-lg font-bold text-[#0F1F1D]">
-                  Your bag is empty
+                  Your cart is empty
                 </p>
                 <p className="text-sm text-[#3F4F4C]">
                   Browse the Prima collection or create a bespoke bag in your event colours.

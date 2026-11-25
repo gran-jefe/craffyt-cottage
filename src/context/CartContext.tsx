@@ -104,7 +104,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         const nextQty = Math.min(stock, existing.quantity + qty)
         if (nextQty === existing.quantity) {
           showToast(
-            `Only ${stock} ${stock === 1 ? 'piece' : 'pieces'} left, and they're all in your bag.`,
+            `Only ${stock} ${stock === 1 ? 'piece' : 'pieces'} left, and they're all in your cart.`,
             'error'
           )
           return
@@ -112,7 +112,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         setItems((prev) =>
           prev.map((i) => (cartLineKey(i) === key ? { ...i, quantity: nextQty, maxStock: stock } : i))
         )
-        showToast(`Added another ${displayName} to your bag.`)
+        showToast(`Added another ${displayName} to your cart.`)
         return
       }
       const line: CartItem = {
@@ -128,7 +128,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         line.variantLabel = label
       }
       setItems((prev) => (prev.some((i) => cartLineKey(i) === key) ? prev : [...prev, line]))
-      showToast(`${displayName} added to your bag.`)
+      showToast(`${displayName} added to your cart.`)
     },
     [items, showToast]
   )
